@@ -1,6 +1,6 @@
 import logging
 
-def getLogger(loggerName, fileName = '', fileMode = 'a', fileLevel = 'DEBUG', printLevel = 'WARN', colours = {}):
+def getLogger(loggerName, fileName = '', fileMode = 'a', fileLevel = 'DEBUG', printLevel = 'WARN', colours = {}, logger_type = 'logging'):
     """Utility that returns a logger object
 
     Parameters
@@ -25,14 +25,21 @@ def getLogger(loggerName, fileName = '', fileMode = 'a', fileLevel = 'DEBUG', pr
     """
     logger_levels = {'DEBUG':logging.DEBUG, 'INFO':logging.INFO, 'WARN':logging.WARN}
 
-    logger = logging.getLogger(loggerName)
+    if logger_type == 'logging':
+        logger = logging.getLogger(loggerName)
+    elif logger_type == 'multiprocessing':
+        import multiprocessing
+        logger = multiprocessing.get_logger()
+    else:
+        raise ValueError(f'invalid logger_type {logger_type}. Must be "logging" or "multiprocessing"')
+
     if logger.hasHandlers():
         logger.handlers[:] = []
 
     logger.setLevel(logging.DEBUG)
 
     # create a logging format
-    formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s/%(processName)s - %(levelname)s - %(message)s')
 
     if fileName:
         assert fileLevel in logger_levels, f"Provided invalid fileLevel '{fileLevel}'. Valid options: {logger_levels.keys()}"
