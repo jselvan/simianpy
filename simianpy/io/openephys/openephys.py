@@ -25,11 +25,6 @@ BYTES_PER_SAMPLE = 2
 RECORD_SIZE = 4 + 8 + SAMPLES_PER_RECORD * BYTES_PER_SAMPLE + 10 # size of each continuous record in bytes
 RECORD_MARKER = np.array([0, 1, 2, 3, 4, 5, 6, 7, 8, 255])
 
-# constants for pre-allocating matrices:
-MAX_NUMBER_OF_SPIKES = int(2e6)
-MAX_NUMBER_OF_RECORDS = int(1e6)
-MAX_NUMBER_OF_EVENTS = int(1e6)
-
 def load(filepath, logger = None):
     filepath = Path(filepath)
 

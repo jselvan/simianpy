@@ -20,10 +20,14 @@ class RHS(File):
     Parameters
     ----------
     filename: str or Path
+    mode: str, optional, default: 'r'
+        Must be one of ['r']
     recipe: str, Path or dict
         recipe describing how to read RHS file
     start_time: pd.Timestamp, optional, default: 0
         If you wish to provide a specific start time - provide a pandas Timestamp for the start time of the recording using pd.to_datetime
+    notch: bool, optional, default: False
+        Whether to use apply notch filter implemented by intan
     logger: logging.Logger, optional
         logger for this object - see simi.io.File for more info
     
@@ -43,12 +47,15 @@ class RHS(File):
     def __init__(self, filename, **params):
         super().__init__(filename, **params)
         self.start_time = params.get('start_time', 0)
+        self.notch = params.get('notch', False)
 
-    def open(self, mode = 'r', notch = False):
-        assert mode in self.modes, f'Mode ({mode}) not supported. Try: {self.modes}'
-        if mode == 'r':
-            self._data = load_intan_rhs_format.read_data(self.filename, notch = notch, logger = self.logger)
+    def open(self):
+        if self.mode == 'r':
+            self._data = load_intan_rhs_format.read_data(self.filename, notch = self.notch, logger = self.logger)
     
+    def close(self):
+        pass
+
     def write(self, filename):
         raise NotImplementedError
     
@@ -64,19 +71,25 @@ class RHS(File):
     def timestamps(self):
         return pd.to_timedelta(self._data['t'], unit = 's') + self.start_time
     
-    @property
-    def spike_data(self):
-        return NotImplemented
+    def get_continuous_data(self, keys = None):
+        if keys is None:
+            vars = self.recipe['continuous_data']
+        else:
+            keys = set(keys)
+            vars = [var for var in self.recipe['continuous_data'] if var['name'] in keys]
 
-    @property
-    def continuous_data(self):
-        return pd.DataFrame(
-            {var['name']: self._data[var['source']][var['idx']] for var in self.recipe['continuous_data']},
+            var_names = {var['name'] for var in vars}
+            missing_keys = keys - var_names
+            assert not missing_keys, f"The following keys are missing: {missing_keys}"
+
+        continuous_data = pd.DataFrame(
+            {var['name']: self._data[var['source']][var['idx']] for var in vars},
             index = self.timestamps
-            )
+        )
 
-    @property
-    def event_data(self):
+        return continuous_data
+    
+    def get_event_data(self):
         def _get_events(eventinfo):
             eventdata = np.sum(
                 [self._data[bit['source']][bit['idx']] * bit['bitval'] for bit in eventinfo], 
@@ -92,8 +105,7 @@ class RHS(File):
             }
         )
     
-    @property
-    def stimulation_data(self):
+    def get_stimulation_data(self):
         return pd.DataFrame(
             data = self._data['stim_data'].T, 
             index = self.timestamps, 

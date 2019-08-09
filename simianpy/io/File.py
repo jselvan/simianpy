@@ -1,6 +1,7 @@
 from ..misc import getLogger
 
 import json
+import yaml
 from pathlib import Path
 
 class File():
@@ -11,8 +12,10 @@ class File():
     needs_recipe = False
     modes = ['r']
     
-    def __init__(self, filename, **params):
+    def __init__(self, filename, mode = 'r', **params):
         self.filename = Path(filename)
+        assert mode in self.modes, f"Provided mode '{mode}' is not supported. Please provide one of: {self.modes}"
+        self.mode = mode
 
         if 'logger' in params:
             self.logger = params['logger']
@@ -35,8 +38,31 @@ class File():
             self.recipe = recipe
         elif isinstance(recipe, Path):
             assert recipe.is_file(), f"Cannot find file at path: {recipe}"
-            assert recipe.suffix == '.json', f"Provided file must a .json file not: {recipe}"
-            with open(Path(recipe), 'r') as f:
-                self.recipe = json.load(f)
+            recipe_parsers = {'.json':json.load, '.yaml':yaml.safe_load}
+            assert recipe.suffix in recipe_parsers.keys(), f"Provided recipe file format '{recipe.suffix}' not supported. Please provide one of {recipe_parsers.keys()}"
+            with open(recipe, 'r') as f:
+                self.recipe = recipe_parsers[recipe.suffix](f)
         else:
-            raise TypeError('Provided recipe must be a list, dict or a Path object pointing to a json file')
+            raise TypeError('Provided recipe must be a list, dict or a Path object pointing to a recipe file')
+    
+    def __enter__(self):
+        if not hasattr(self, 'open'):
+            raise NotImplementedError('No open method exists for this class. Cannot use the context manager to interact.')
+        self.open()
+        return self
+    
+    def __exit__(self, exc_type, exc_value, traceback):
+        if exc_type is not None:
+            self.logger.warning(f"type={exc_type}\nvalue={exc_value}\ntraceback:\n{traceback}", exc_info=True)
+        
+        try:
+            self.close()
+        except NotImplementedError:
+            self.logger.warning(f"The 'close' method is not implemented for this class. File closing may not be handled properly", exc_info=True)
+            
+    
+    def open(self):
+        raise NotImplementedError
+
+    def close(self):
+        raise NotImplementedError
