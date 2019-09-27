@@ -23,7 +23,6 @@ then, use WriteNexFile method:
 
 If your files are larger than a few MB, use numpy version of the NexWriter:
     import nexfile
-    import numpy as np
     timestampFrequency = 50000
     writer = nexfile.NexWriter(timestampFrequency, useNumpy=True)
     writer.AddNeuron('neuron1', np.array([1, 2, 3, 4]))
@@ -37,6 +36,12 @@ import struct
 import array
 import json
 import numbers
+
+try:
+    import numpy as np
+except ImportError:
+    import warnings
+    warnings.warn('nexfile: unable to import numpy')
 
 
 class NexFileVarType:
@@ -155,6 +160,7 @@ class Reader(object):
         fhValues = struct.unpack(fileHeaderFormat, self.theFile.read(struct.calcsize(fileHeaderFormat)))
         keys = ['MagicNumber', 'NexFileVersion', 'Comment', 'Frequency', 'Beg', 'NumVars', 'MetaOffset', 'End',
                 'Padding']
+        fileHeader = dict(zip(keys, fhValues))
         fileHeader['Padding'] = ''
 
         if fileHeader['MagicNumber'] != 894977358:
@@ -226,7 +232,6 @@ class Reader(object):
         var['Timestamps'] = self._ReadAndScaleValues(tsValueType, var['Header']['Count'], self.tsFreq, True)
 
     def _ReadAndScaleValuesUsingNumpy(self, valueType, count, coeff=1.0, divide=False):
-        import numpy as np
         if valueType == 'h': numpyType = np.int16
         if valueType == 'l': numpyType = np.int32
         if valueType == 'L': numpyType = np.uint32
@@ -291,7 +296,6 @@ class Reader(object):
             woffset = 0.0
         wf = self._ReadAndScaleValues(wfValueType, var['Header']['Count'] * var['Header']['NPointsWave'], coeff)
         if self.useNumpy:
-            import numpy as np
             var['WaveformValues'] = wf.reshape( var['Header']['Count'], var['Header']['NPointsWave'])
             if woffset != 0:
                 var['WaveformValues'] = var['WaveformValues'] + woffset
@@ -484,7 +488,6 @@ class NexWriter(object):
         self._AddNex5VarHeaderFields(var)
         var['Timestamps'] = [timestampOfFirstDataPoint]
         if self.useNumpy:
-            import numpy as np
             var['Timestamps'] = np.array(var['Timestamps'])
         var['FragmentIndexes'] = [0]
         var['FragmentCounts'] = [len(values)]
@@ -518,7 +521,6 @@ class NexWriter(object):
                 var['ContinuousValues'].extend(fragment)
             totalValues += len(fragment)
         if self.useNumpy:
-            import numpy as np
             var['ContinuousValues'] = np.array([])
             for fragment in fragmentValues:
                 var['ContinuousValues'] = np.append(var['ContinuousValues'], fragment)
@@ -713,7 +715,6 @@ class NexWriter(object):
 
     # the following class methods are internal
     def _VerifyIsNumpyArray(self, name, a):
-        import numpy as np
         if not isinstance(a, np.ndarray):
             raise ValueError(name + ' should be a numpy array')
 
@@ -807,14 +808,12 @@ class NexWriter(object):
             return len(var['Timestamps'])
 
     def _MaxOfNumpyArrayOrZero(self, x):
-        import numpy as np
         if len(x) == 0:
             return 0
         else:
             return np.max(x)
 
     def _VarMaxTimestampNumpy(self, var):
-        import numpy
         varType = var['Header']['Type']
         if varType == NexFileVarType.NEURON or varType == NexFileVarType.EVENT or varType == NexFileVarType.MARKER:
             return self._MaxOfNumpyArrayOrZero(var['Timestamps'])
@@ -856,7 +855,6 @@ class NexWriter(object):
             return var['Timestamps'][-1] + (var['FragmentCounts'][-1] - 1) / var['Header']['SamplingRate']
 
     def _VarWriteTimestampsNumpy(self, var, timestamps):
-        import numpy as np
         if self._BytesInTimestamp(var) == 4:
             np.round(timestamps * self.tsFreq).astype(np.int32).tofile(self.theFile)
         else:
@@ -877,14 +875,12 @@ class NexWriter(object):
                     self.theFile.write(struct.pack('q', int(round(x * self.tsFreq))))
 
     def _VarWriteWaveformsNumpy(self, var):
-        import numpy as np
         if self._BytesInContValue(var) == 2:
             np.round(var['WaveformValues'] / var['Header']['ADtoMV']).astype(np.int16).tofile(self.theFile)
         else:
             var['WaveformValues'].astype(np.float32).tofile(self.theFile)
 
     def _VarWriteContinuousValuesNumpy(self, var):
-        import numpy as np
         if self._BytesInContValue(var) == 2:
             np.round(var['ContinuousValues'] / var['Header']['ADtoMV']).astype(np.int16).tofile(self.theFile)
         else:
@@ -974,7 +970,6 @@ class NexWriter(object):
         return maxTs
 
     def _SignalAbsMaxNumPy(self, signal):
-        import numpy as np
         return np.max(np.abs(signal))
 
     def _CalculateScaling(self, var):

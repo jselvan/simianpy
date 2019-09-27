@@ -1,6 +1,6 @@
 import logging
 
-def getLogger(loggerName, fileName = '', fileMode = 'a', fileLevel = 'DEBUG', printLevel = 'WARN', colours = {}, logger_type = 'logging'):
+def getLogger(loggerName, fileName = '', fileMode = 'a', fileLevel = 'DEBUG', printLevel = 'WARN', colours = {}, logger_type = 'logging', capture_warnings = True):
     """Utility that returns a logger object
 
     Parameters
@@ -33,25 +33,24 @@ def getLogger(loggerName, fileName = '', fileMode = 'a', fileLevel = 'DEBUG', pr
     else:
         raise ValueError(f'invalid logger_type {logger_type}. Must be "logging" or "multiprocessing"')
 
+    logging.captureWarnings(capture_warnings)
+
     if logger.hasHandlers():
         logger.handlers[:] = []
 
     logger.setLevel(logging.DEBUG)
-
-    # create a logging format
-    formatter = logging.Formatter('%(asctime)s - %(name)s/%(processName)s - %(levelname)s - %(message)s')
+    formatter = logging.Formatter('%(asctime)s - %(name)s/%(processName)s - %(module)s/%(funcName)s - %(levelname)s - %(message)s')
 
     if fileName:
-        assert fileLevel in logger_levels, f"Provided invalid fileLevel '{fileLevel}'. Valid options: {logger_levels.keys()}"
-        # create and add file handler
+        if not fileLevel in logger_levels:
+            raise ValueError(f"Provided invalid fileLevel '{fileLevel}'. Valid options: {logger_levels.keys()}")
         fileHandler = logging.FileHandler(fileName, mode = fileMode)
         fileHandler.setLevel(logger_levels[fileLevel])
         fileHandler.setFormatter(formatter)
         logger.addHandler(fileHandler)
 
-    assert printLevel in logger_levels, f"Provided invalid printLevel '{printLevel}'. Valid options: {logger_levels.keys()}"
-    
-    # create and add stream handler
+    if not printLevel in logger_levels:    
+        raise ValueError(f"Provided invalid printLevel '{printLevel}'. Valid options: {logger_levels.keys()}")
     try:
         import colorama
     except ImportError:
@@ -62,7 +61,6 @@ def getLogger(loggerName, fileName = '', fileMode = 'a', fileLevel = 'DEBUG', pr
         colorama.init(autoreset=True)
         streamHandler = ColourStreamHandler(colours)
         colour_support = True
-        
     streamHandler.setLevel(printLevel)
     logger.addHandler(streamHandler)
 

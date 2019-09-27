@@ -45,7 +45,8 @@ class Smooth():
         return self._size
     @size.setter
     def size(self, size):
-        assert isinstance(size, int), TypeError(f'size must be int not {type(size)}')
+        if not isinstance(size, int):
+            raise TypeError(f'size must be int not {type(size)}')
         self._size = size
     
     @property
