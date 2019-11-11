@@ -1,3 +1,5 @@
+import warnings
+
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -5,39 +7,59 @@ import pandas as pd
 class BehaviouralData:
     """Utility class to analyze Behavioural Data
 
-    Takes event data and eye data to get trial by trial information based on a config
+    Takes event data and (optionally) continuous data to get trial by trial \
+    information based on a config
+    Trial start and end codes are used to extract trials
+        value for the start code becomes the condition name
+        value for the end code becomes the outcome variable
+        timestamp is collected for all codes that fall within a trial
 
     Parameters
     ----------
     event_data: pd.Series
         event data with a datetime index and values corresponding to event markers
-    eyedata: pd.DataFrame
-        eye data with a datetime index and containing 'eyeh' and 'eyev' columns
     config: dict
-        config dict with a map of all codes as well as start and stop events
-        ex: config = {'start': [1,2], 'end': [200,201], 'codes': {1:'left', 2:'right', 200:'correct', 201:'incorrect', 50: 'stimulus onset'} }
+        config dict with a map of all codes as well as start and end events
+    contdata: pd.DataFrame
+        continuous data with a datetime index
+        may contain eye data, LFP data, etc
     
     Attributes
     ----------
     trialstart
     trialend
-    trialinfo
 
     Methods
     -------
-    get_trial_eyedata(tracelength=None)
+    get_trial_info()
+    get_trial_contdata(tracelength=None)
 
     Examples
     --------
+    config = {
+        'start': [1,2], 
+        'end': [200,201], 
+        'codes': {
+            1:'left', 2:'right', 200:'correct', 
+            201:'incorrect', 50: 'stimulus onset'
+        } 
+    }
     --coming soon--
     """
-    def __init__(self, event_data, eyedata, config):
+    def __init__(self, event_data, config, contdata=None):
         self.event_data = event_data
-        self.eyedata = eyedata
+        self.contdata = contdata
 
-        assert isinstance(config, dict)
-        assert all(param in config for param in ['codes', 'start', 'end'])
-        assert all(unique_marker in config['codes'] for unique_marker in self.event_data.unique()),  f"All markers must be described in configs. Here are the markers in the file {self.event_data.unique()}"
+        params = ('codes', 'start', 'end')
+        if not all(param in config.keys() for param in params):
+            raise ValueError(f"Config must be a dict-like with keys: {params}")
+        unique_markers_in_file = set(self.event_data.unique())
+        unique_markers_in_config = set(config['codes'].keys())
+        if not all(unique_marker in config['codes'] for unique_marker in unique_markers_in_file):
+            missing_markers = unique_markers_in_file - unique_markers_in_config
+            warnings.warn(f"""All markers should be described in configs.
+            Here are the markers in the file {self.event_data.unique()}.
+            The following keys are missing from the config {missing_markers}""")
         self.config = config
     
     @property
@@ -49,39 +71,86 @@ class BehaviouralData:
         trialstartidx, = np.where(self.event_data.isin(self.config['start']))
         return self.event_data.index[(trialstartidx[1:]-1)].append(self.event_data.index[-1:])
 
-    @property
-    def trialinfo(self):
+    def get_trial_info(self):
         trials = [self.event_data.loc[slice(start,end)] for start, end in zip (self.trialstart, self.trialend)]
         trialinfo = []
         for trial in trials:
             _trialinfo = {}
             for timestamp, marker in trial.items():
+                marker_value = self.config['codes'].get(marker, marker)
                 if marker in self.config['start']:
-                    _trialinfo['condition'] = self.config['codes'][marker]
+                    _trialinfo['condition'] = marker_value
                     _trialinfo['trialstart'] = timestamp 
                 elif marker in self.config['end']:
-                    _trialinfo['outcome'] = self.config['codes'][marker]
+                    _trialinfo['outcome'] = marker_value
                     _trialinfo['trialend'] = timestamp
                 else:
-                    _trialinfo[self.config['codes'][marker]] = timestamp
+                    _trialinfo[marker_value] = timestamp
             trialinfo.append(_trialinfo)
-        return pd.DataFrame(trialinfo)
+        trialinfo_df = pd.DataFrame(trialinfo)
+        trialinfo_df.index.name = 'trialid'
+        return trialinfo_df
     
-    def get_trial_eyedata(self, tracelength = None):
+    def get_trial_contdata(self, tracelength=None, start='trialstart', end='trialend', pad=(None, None), cols=None, relative_timestamps=True, dropna=False):
         """Get eye traces for each trial
 
         Parameters
         ----------
         tracelength: pd.Timedelta or None, default: None
-            Determines length of eye traces, If None, get eye traces from trial start to trial end
+            Determines length of eye traces
+            If not None, provided 'end' is ignored
+        start: str, default: 'trialstart'
+            A string that corresponds to a marker name used as the start of the slice
+        end: str, default: 'trialend'
+            A string that corresponds to a marker name used as the end of the slice
+            Ignored if tracelength is provided
+        pad: 2-tuple of pd.Timedelta or None, default: (None, None)
+            A 2-tuple corresponding to padding at start and end of slice
+        cols: list or None, default: None
+            List of columns to extract from self.contdata
+        relative_timestamps: boolean, default: True
+            if true, timestamps are subtracted by start value
+        dropna: boolean, default: False
+            if true, any trials with timestamps in start or end that are nan values will be dropped 
         
         Returns
         -------
-        trial_eyedata: list of pd.DataFrame
+        trial_eyedata: pd.DataFrame
         """
-        if tracelength is None:
-            trial_eyedata = [self.eyedata.loc[slice(start, end)] for start, end in zip(self.trialstart, self.trialend)]
-        else:
-            trial_eyedata = [self.eyedata.loc[slice(start, start + tracelength)] for start in self.trialstart]
+        if self.contdata is None:
+            raise ValueError(f"Must provide self.contdata if you want self.get_trial_contdata")
+
+        trial_info = self.get_trial_info()
+        trial_info['slice_start'] = trial_info[start]
+        trial_info['slice_end'] = trial_info[end]
+
+        if dropna:
+            idx = trial_info.loc[:, ['slice_start', 'slice_end']].isna().any(axis=1)
+            trial_info = trial_info[~idx]
         
-        return trial_eyedata
+        if cols is None:
+            cols = slice(None)
+
+        def get_contdata(row):
+            start = row.slice_start
+            if pad[0] is not None:
+                start += pad[0]
+            end = row.slice_end if tracelength is None else row.slice_start+tracelength
+            if pad[1] is not None:
+                end += pad[1]
+            tslice = slice(start, end)
+
+            trace = self.contdata.loc[tslice, cols]
+            if relative_timestamps:
+                trace.index = trace.index - row.slice_start
+            
+            return trace
+
+        trial_contdata = {
+            (row.Index, row.condition, row.outcome): get_contdata(row)
+            for row in trial_info.itertuples()
+        }
+
+        names = ('trialid', 'condition', 'outcome', *self.contdata.index.names)
+        trial_contdata_df = pd.concat(trial_contdata, names=names)
+        return trial_contdata_df

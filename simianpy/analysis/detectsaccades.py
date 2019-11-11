@@ -3,17 +3,40 @@ from itertools import product
 import numpy as np
 import pandas as pd
 
-def DetectSaccades(eyedata, method = 'radial', velocity_threshold = 30, duration_threshold = None, sampling_rate = 1e3):
+def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_threshold=None, sampling_rate=1e3):
     """Detects saccades in eyedata using a velocity threshold (and optionally a duration threshold)
 
-    Required arguments:
-    eyedata (pandas.DataFrame) - must contain a pd.DatetimeIndex and columns 'eyeh' and 'eyev'
+    Parameters
+    ----------
+    eyedata: pd.DataFrame
+        continuous eye data
+        index must be datetime or timedelta
+        columns must be 'eyeh' and 'eyev'
+    method: str, default='radial'
+        must be one of ['radial','horizontal','vertical']
+        applies velocity threshold to listed variable for saccade detection
+    velocity_threshold: numeric, default=30
+        velocity threshold for saccade detection in deg/s
+    duration_threshold: pd.offsets.Milli, default=None
+        if not None, used as minimum duration for saccade
+    sampling_rate: numeric, default=1e3
+        sampling rate of eyedata in Hz
 
-    Optional arguments:
-    method (str; default = 'radial') - what is used to compute velocity; must be one of 'radial', 'horizontal', 'vertical'
-    velocity_threshold (float; default = 30) - the velocity threshold in degrees per second
-    duration_threshold (pd.Timedelta or None; default = None) - if not None, duration_threshold specifies minimum saccade duration
-    sampling_rate (float; default = None)
+    Returns
+    -------
+    saccade_data: pd.DataFrame
+        will contain t, x and y for onset, offset and delta
+        saccade amplitude, direction and duration will be computed
+        latency will be provided if eyedata has a timedelta index
+    
+    Notes
+    -----
+    direction is computed as np.arctan2(delta_y, delta_x)
+    peak_radial_velocity is simply the max velocity during the saccade
+
+    Examples
+    --------
+    ---coming soon---
     """
     #TODO Remove type checking in favor of duck typing?
     allowed_index_dtypes = pd.DatetimeIndex, pd.TimedeltaIndex
@@ -48,7 +71,7 @@ def DetectSaccades(eyedata, method = 'radial', velocity_threshold = 30, duration
     
     if onset.size != offset.size:
         if onset.size - offset.size == 1:
-            onset = onset[:-1] # exclude last saccade
+            onset = onset[:-1] # exclude last saccade if offset not detected
         else:
             raise ValueError(
                 f"Number of onsets {onset.size} and offsets {offset.size} \
