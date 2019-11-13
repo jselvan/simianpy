@@ -6,7 +6,6 @@
 from ...misc import getLogger
 from .intanutil.read_header import read_header
 from .intanutil.get_bytes_per_data_block import get_bytes_per_data_block
-from .intanutil.read_one_data_block import read_one_data_block
 from .intanutil.notch_filter import notch_filter
 from .intanutil.data_to_result import data_to_result
 
@@ -26,6 +25,7 @@ def read_data(filename, notch = False, logger = None):
     logger (logger or None; default = None) -- used for printing to screen and logging in .log file.  If None, a logger is initialized with log file sharing a name with RHS file
     notch (bool; default = False) -- if True and if software notch filter was selected during recording, reapply notch filter to amplifier data. Note the implementation of the notch filter used here seems very performance intensive and may considerably slow file reading.
     """
+    #TODO: Implement caching or memory mapping for opening of large files 
     tic = time.time() 
 
     filename = Path(filename)

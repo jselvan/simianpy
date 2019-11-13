@@ -10,7 +10,8 @@ import pandas as pd
 def load(filename, useNumpy = True):
     allowed_extensions = ['.nex', '.nex5']
     filename = Path(filename)
-    assert filename.suffix in allowed_extensions, f"Provided filename '{filename}' ends with an invalid extension. Must be one of: {', '.join(allowed_extensions)}"
+    if not filename.suffix in allowed_extensions:
+        raise ValueError(f"Provided filename '{filename}' ends with an invalid extension. Must be one of: {', '.join(allowed_extensions)}")
     reader = Reader(useNumpy=useNumpy)
     return reader.ReadNexFile(filename)
 
@@ -20,10 +21,14 @@ class Nex(File):
     Parameters
     ----------
     filename: str or Path
+    mode: str, optional, default: 'r+'
+        Must be one of ['r+','w']
     start_time: pd.Timestamp, optional, default: 0
         If you wish to provide a specific start time - provide a pandas Timestamp for the start time of the recording using pd.to_datetime
     useNumpy: bool, optional, default: True
         If True, use numpy arrays to hold data (recommended use)
+    timestampFrequency: int, optional, default: None
+        If mode = 'w', timestampFrequency must be provided (in Hz). Else will be inferred from file.
     logger: logging.Logger, optional
         logger for this object - see simi.io.File for more info
     
@@ -44,6 +49,7 @@ class Nex(File):
     """
     description = """ """
     extension = ['.nex', '.nex5']
+    default_mode = 'r+'
     modes = ['r+', 'w']
     isdir = False
     vartypes_dict = {
@@ -62,19 +68,27 @@ class Nex(File):
         self.writer = None
         self.start_time = params.get('start_time', 0)
         self.useNumpy = params.get('useNumpy', True)
+        self.timestampFrequency = params.get('timestampFrequency', None)
 
-    def open(self, mode = 'r+', timestampFrequency = None):
-        assert mode in self.modes, f'Mode ({mode}) not supported. Try: {self.modes}'
-        if mode == 'r+':
+    def open(self):
+        if self.mode == 'r+':
             data = load(self.filename, useNumpy = self.useNumpy)
-            if timestampFrequency == None:
-                timestampFrequency = data['FileHeader']['Frequency']
-            self.writer = NexWriter(timestampFrequency = timestampFrequency, useNumpy = self.useNumpy)
+            if self.timestampFrequency is None:
+                self.timestampFrequency = data['FileHeader']['Frequency']
+            else:
+                if self.timestampFrequency != data['FileHeader']['Frequency']:
+                    self.logger.warning(f"provided timestampFrequency {self.timestampFrequency} does not match file header {data['FileHeader']['Frequency']}")
+            self.writer = NexWriter(timestampFrequency = self.timestampFrequency, useNumpy = self.useNumpy)
             self.writer.fileData = data
-        elif mode == 'w':
-            assert timestampFrequency is not None, f'You must provide a timestampFrequency if mode = "w"'
-            self.writer = NexWriter(timestampFrequency = timestampFrequency, useNumpy = self.useNumpy)
+        elif self.mode == 'w':
+            if self.timestampFrequency is None:
+                raise ValueError(f'You must provide a timestampFrequency if mode = "w"')
+            self.writer = NexWriter(timestampFrequency = self.timestampFrequency, useNumpy = self.useNumpy)
     
+    def close(self):
+        if self.mode in ['r+', 'w']:
+            self.write()
+
     def write(self, filename = None, saveContValuesAsFloats = 0):
         if filename is None:
             filename = self.filename
@@ -134,13 +148,10 @@ class Nex(File):
             for timestamp, idx, count in zip(self._get_timestamps(var['Timestamps']), var['FragmentIndexes'], var['FragmentCounts'])
             ])
 
-
-    @property
-    def continuous_data(self):
+    def get_continuous_data(self):
         return pd.DataFrame({var['Header']['Name']: self._get_continuous_data(var) for var in self._vararray[self.vartypes == 'continuous']})
 
-    @property
-    def spike_data(self):
+    def get_spike_data(self):
         return pd.concat(
             [
                 pd.DataFrame(
@@ -159,8 +170,7 @@ class Nex(File):
             ]
         )
 
-    @property
-    def event_data(self):
+    def get_event_data(self):
         return pd.DataFrame({
             f"{var['Header']['Name']}/{name}":pd.Series(markers, index = self._get_timestamps(var['Timestamps'])) 
             for var in self._vararray[self.vartypes == 'markers']

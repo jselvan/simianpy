@@ -24,7 +24,7 @@ def read_qstring(fid):
     length = int(length / 2)
 
     data = []
-    for i in range(0, length):
+    for _ in range(0, length):
         c, = struct.unpack('<H', fid.read(2))
         data.append(c)
 

@@ -5,7 +5,9 @@ from ..File import File
 from collections import defaultdict
 from pathlib import Path
 import time
+import json
 
+import numpy as np
 import pandas as pd
 
 class OpenEphys(File):
@@ -15,13 +17,29 @@ class OpenEphys(File):
     --------
     This class is still under development!
 
+    Handling of event data is currently hard coded into this class.
+    Recommended use case is to subclass or monkey patch 
+
     Parameters
     ----------
-    filename: str or Path
+    filename: str or Path 
+    mode: str, optional, default: 'r' 
+        Must be one of ['r']
     recipe: str, Path or list
         recipe describing what files to load
     start_time: pd.Timestamp, optional, default: 0
-        If you wish to provide a specific start time - provide a pandas Timestamp for the start time of the recording using pd.to_datetime
+        If you wish to provide a specific start time,
+        provide a pandas Timestamp using pd.to_datetime
+    use_cache: bool, optional, default: False
+        If True, data will be dumped into an HDF file via h5py.File
+    cache_path: Path, file-like object or None, optional, default: None
+        If a cache_path is provided, the HDF file will be saved.
+        Any valid input to h5py.File is accepted
+        If None, a temporary file (tempfile.TemporaryFile) will be 
+        used. This file will be deleted upon closing the file
+    overwrite_cache: bool, optional, default: False
+        If false, data will not be loaded if already present in cache
+        If true, data in cache will be overwritten
     logger: logging.Logger, optional
         logger for this object - see simi.io.File for more info
     
@@ -35,33 +53,61 @@ class OpenEphys(File):
     extension = ['.continuous', '.spikes', '.events']
     isdir = True
     needs_recipe = True
-    modes = ['r', 'rp']
+    default_mode = 'r'
+    modes = ['r']
 
-    def open(self, mode = 'r'):
-        assert mode in self.modes, f'Mode ({mode}) not supported. Try: {self.modes}'
-        self._data = defaultdict(dict)
-        if mode == 'r':
+    def __init__(self, filename, **params):
+        super().__init__(filename, **params)
+        self.start_time = params.get('start_time', 0)
+
+    def open(self):
+        self._get_data_cache()
+        if self.mode == 'r':
             for file_params in self.recipe:
-                fpath = Path(self.filename, file_params['file'])
-                assert fpath.is_file(), f"File ({fpath.name}) not found at {fpath.parent}"
-                self._data[file_params['type']][file_params['name']] = load(fpath, self.logger)
-        elif mode == 'rp':
-            pass
+                filename = file_params['file']
+                filetype = file_params['type']
+                varname = file_params['name']
 
+                if not self.overwrite_cache and filetype in self._data.keys() and varname in self._data[filetype].keys():
+                    continue
+                if self.use_cache and filetype not in self._data.keys():
+                    #unlike the defaultdict interface, h5py interface does not 
+                    #tolerate missing labels unless we use h5py address syntax
+                    self._data.create_group(filetype)
+
+                fpath = Path(self.filename, filename)
+                if not fpath.is_file():
+                    raise FileNotFoundError(f"File ({fpath.name}) not found at {fpath.parent}")
+                
+                #header must be serialized to allow interoperability with hdf caching
+                data = load(fpath, self.logger)
+                header = data.pop('header')
+                self._data[filetype][varname] = data
+                self._data[filetype][varname]['header'] = json.dumps(header)
+
+    def close(self):
+        if self.mode == 'r':
+            pass
     
     def write(self, filename):
         raise NotImplementedError
 
     @staticmethod
     def read_timestamps(timestamps, start):
-        return pd.to_datetime(start, format = "%d-%b-%Y %I%M%S") + pd.to_timedelta(timestamps, unit = 's')
+        return pd.to_datetime(start, format = "%d-%b-%Y %H%M%S") + pd.to_timedelta(timestamps, unit = 's')
 
-    def _parse_continuous_data(self, var_data):
+    def _parse_continuous_data(self, cnt_data):
+        header = json.loads(cnt_data['header'])
+        block_length = int(header['blockLength'])
+        sampling_rate = int(header['sampleRate'])
+        start_time = header['date_created']
+        expanded_timestamps = ( np.expand_dims(cnt_data['timestamps'], axis = 1) \
+            + np.expand_dims(np.arange(block_length)/sampling_rate, axis = 0) ).flatten()
         return pd.Series(
-            var_data['data'],
+            cnt_data['data'],
             index = self.read_timestamps(
-                timestamps=var_data['timestamps'], 
-                start=var_data['header'][' date_created'].strip("'")
+                timestamps=expanded_timestamps, 
+                start=start_time
             )
         )
 
@@ -92,88 +138,61 @@ class OpenEphys(File):
             continuous_data = continuous_data.asfreq(resample_freq)
         return continuous_data
     
-    def _parse_spike_data(self, var_data):
+    def _parse_spike_data(self, spk_data):
+        header = json.loads(spk_data['header'])
+        sample_in_microseconds = f"{1e6/header['sampleRate']:.3f}U"
+        start_time = header['date_created']
         return pd.DataFrame(
-            var_data['spikes'],
-            columns = pd.timedelta_range(0, periods = var_data['spikes'].shape[1], freq = f"{1e6/var_data['header']['sampleRate']:.3f}U"),
+            spk_data['spikes'],
+            columns = pd.timedelta_range(0, periods = spk_data['spikes'].shape[1], freq = sample_in_microseconds),
             index = pd.MultiIndex.from_arrays(
                 [
-                    [var_data['Header']['Unit']]*var_data['Timestamps'].size, 
-                    var_data['sortedId'],
-                    self.read_timestamps(var_data['Timestamps'], start = var_data['header'][' date_created'].strip("'"))
+                    [spk_data['Header']['Unit']]*spk_data['Timestamps'].size, 
+                    spk_data['sortedId'],
+                    self.read_timestamps(spk_data['Timestamps'], start = start_time)
                 ],
                 names = ('Channel', 'Unit', 'Timestamps')
             )
         )
 
     def get_spike_data(self, keys = None):
-        return pd.concat(
-            [
-                self._parse_spike_data(var)
-                for name, var in self._data['spikes'].items()
-            ]
+        if keys is None:
+            keys = self._data['spikes'].keys()
+        spike_data = pd.concat(
+            {key: self._parse_spike_data(self._data['spikes'][key]) for key in keys}
         )
-
-
-        # return pd.DataFrame(
-        #     {name: pd.Series(
-        #         var['data']['spikes'], 
-        #         index = self.read_timestamps(
-        #             timestamps = var['data']['timestamps'], 
-        #             start = var['data']['header'][' date_created'].strip("'")
-        #             )
-        #         ) 
-        #         for name, var in self._data['spikes'].items()
-        #     })
+        return spike_data
     
-        # pd.DataFrame(d['spikes'][:,:,0], index = self.read_timestamps(d['timestamps'], d['header'][' date_created'].strip("'")))
-    
-    @property
-    def event_data(self):
-        pass
+    def _parse_event_data(self, evt_data):
+        header = json.loads(evt_data['header'])
+        start_time = header['date_created']
+        vars = ['timestamps', 'eventId', 'channel']
+        evt_data_df = pd.DataFrame( {var: evt_data[var].squeeze() for var in vars} )
+        evt_data_df['bitVal'] = 2**(7-evt_data_df['channel'])
+        event_data = evt_data_df.query('eventId==1').groupby('timestamps').bitVal.sum()
+        event_data.index = self.read_timestamps( timestamps=event_data.index , start=start_time )
+        return event_data
 
-    @staticmethod
-    def get_event_info(event_data):
-        """ Gets markers and timestamps from event data
-        Ex:
-        event_data = OpenEphys.load('all_channels.events')
-        markers, timestamps = get_event_info(event_data)
+    def get_event_data(self, keys = None):
+        if keys is None:
+            keys = self._data['events'].keys()
+        event_data = pd.DataFrame(
+            {key: self._parse_event_data(self._data['events'][key]) for key in keys}
+        )
+        return event_data
 
-        Required parameters:
-        event_data -- valid open-ephys dict containing event data, obtained via OpenEphys.load (dict)
-
-        Returns:
-        markers -- list of markers (list of float)
-        timestamps -- list of timestamps (list of float)
-        """
-        markers = []
-        timestamps = []
-        marker_val = 0
-        for timestamp, channel, eventId in zip(event_data['timestamps'], 2**(7 - event_data['channel']), event_data['eventId']):
-            if eventId == 1:
-                marker_val += channel
-            else:
-                if marker_val:
-                    markers.append(marker_val)
-                    timestamps.append(timestamp)
-                marker_val = 0
-        return markers, timestamps
-    
-    def to_nex(self, nexfile_path, timestampFrequency = None, **params):
+    def to_nex(self, nexfile_path, timestampFrequency, **params):
+        #TODO implement to_nex function
         nexfile_path = Path(nexfile_path)
-        assert nexfile_path.suffix == '.nex', 'File must have extension ".nex"'
-
-        if timestampFrequency is None:
-            #infer timestampFrequency from recipe 
-            pass
-        nexfile = Nex(nexfile_path, **params)
         
-        nexfile.open('w', timestampFrequency=timestampFrequency)
         start_time = time.time()
+        with Nex(nexfile_path, mode='w', timestampFrequency=timestampFrequency, **params) as nexfile:
+            pass
 
         self.logger.info(f'\nSuccessfully wrote nexfile at path: {nexfile_path}')
         self.logger.info(f'Total time: {(time.time() - start_time):.3f} seconds\n\n')
         return nexfile
+
 
     # unit_as_char = lambda x: chr(x - 1 + ord('a')) if x > 0 else 'U'
     # writer = nexfile.NexWriter(SamplingRate_spikes, useNumpy=True)
@@ -217,7 +236,7 @@ class OpenEphys(File):
     #         WaveformValues = WaveformValues, 
     #         NPointsWave=NPointsWave,
     #         PrethresholdTimeInSeconds=PrethresholdTimeInSeconds,
-    #         wire = i,
+    #         wire = channel,
     #         unit = unit_num
     #         )
         

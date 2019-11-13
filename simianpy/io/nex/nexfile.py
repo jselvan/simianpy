@@ -88,7 +88,7 @@ class Reader(object):
         self.fileData['Variables'] = []
 
         # read variable headers and create variables
-        for varNum in xrange(self.fileData['FileHeader']['NumVars']):
+        for varNum in range(self.fileData['FileHeader']['NumVars']):
             var = {'Header': self._ReadNex5VarHeader()}
             self.fileData['Variables'].append(var)
 
@@ -252,7 +252,7 @@ class Reader(object):
         if valueType == 'q':
             # 64-bit int is NOT supported by Python array, we have to use struct
             vList = []
-            for i in xrange(count):
+            for i in range(count):
                 vList.append(struct.unpack('q', self.theFile.read(8))[0])
             if coeff == 1.0:
                 return vList

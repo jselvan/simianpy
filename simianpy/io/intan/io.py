@@ -6,7 +6,8 @@ import pandas as pd
 
 def load(filename, **kwargs):
     allowed_extensions = ['.rhs']
-    assert any(filename.endswith(ext) for ext in allowed_extensions), f"Provided filename '{filename}' ends with an invalid extension. Must be one of: {', '.join(allowed_extensions)}"
+    if not any(filename.endswith(ext) for ext in allowed_extensions):
+        raise ValueError(f"Provided filename '{filename}' ends with an invalid extension. Must be one of: {', '.join(allowed_extensions)}")
     if filename.endswith('rhs'):
         return load_intan_rhs_format.read_data(filename, **kwargs)
 
@@ -42,6 +43,7 @@ class RHS(File):
     extension = ['.rhs']
     isdir = False
     needs_recipe = True
+    default_mode = 'r'
     modes = ['r']
 
     def __init__(self, filename, **params):
@@ -80,7 +82,8 @@ class RHS(File):
 
             var_names = {var['name'] for var in vars}
             missing_keys = keys - var_names
-            assert not missing_keys, f"The following keys are missing: {missing_keys}"
+            if missing_keys:
+                raise KeyError(f"The following keys are missing: {missing_keys}")
 
         continuous_data = pd.DataFrame(
             {var['name']: self._data[var['source']][var['idx']] for var in vars},
