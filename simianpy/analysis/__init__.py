@@ -12,3 +12,4 @@ Modules
 """
 from .behaviouraldata import BehaviouralData
 from .detectsaccades import DetectSaccades
+from .linear_regression import LinearRegression
