@@ -27,12 +27,12 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
     saccade_data: pd.DataFrame
         will contain t, x and y for onset, offset and delta
         saccade amplitude, direction and duration will be computed
+        peak radial velocity is computed as max velocity during saccade
         latency will be provided if eyedata has a timedelta index
     
     Notes
     -----
     direction is computed as np.arctan2(delta_y, delta_x)
-    peak_radial_velocity is simply the max velocity during the saccade
 
     Examples
     --------
@@ -63,6 +63,7 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
     velocity.rename('velocity')
     saccade = velocity.abs() > velocity_threshold
 
+    #TODO: write a general function that accomplishes this (can be used for analog TTL, etc)
     onset = saccade & (saccade != saccade.shift()) & ~saccade.shift().isna()
     offset = ~saccade & (saccade != saccade.shift()) & ~saccade.shift().isna()
 
@@ -110,9 +111,9 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
         saccade_data['direction'] = np.arctan2(saccade_data['delta_y'], saccade_data['delta_x'])
         saccade_data['duration'] = saccade_data['delta_t'].dt.total_seconds()*1e3
 
-        if hasattr(saccade_data['onset_t'], 'dt'):
+        if hasattr(saccade_data['onset_t'], 'dt') and hasattr(saccade_data['onset_t'].dt, 'total_seconds'):
             saccade_data['latency'] = saccade_data['onset_t'].dt.total_seconds()*1e3
 
-    saccade_data.reset_index(drop=True, inplace = True)
+    saccade_data.reset_index(drop=True, inplace=True)
 
     return saccade_data
