@@ -16,9 +16,12 @@ setup(
         'scipy',
         'pandas',
         'matplotlib',
+        'pyyaml',
+        'h5py',
+        'tables'
     ],
     extras_require = {
-        'FULL': ['colorama','holoviews','tables','tqdm','h5py']
+        'FULL': ['colorama','holoviews','bokeh','tqdm','ipython']
     },
     zip_safe=False
 )

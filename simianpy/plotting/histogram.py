@@ -14,7 +14,7 @@ def _histogram_holoviews(edges, frequencies):
     hist = hv.Histogram((edges, frequencies))
     return hist
 
-def Histogram(data, bins=10, range=None, invert=False, engine='holoviews'):
+def Histogram(data, bins=10, range=None, density=False, multiplier=1, invert=False, engine='holoviews'):
     """ A convenience function for generating histograms
 
     Parameters
@@ -25,15 +25,20 @@ def Histogram(data, bins=10, range=None, invert=False, engine='holoviews'):
         Defines histrogram bins (see np.histogram)
     range: (float, float), optional; default = None
         Lower and upper bounds of the bins (see np.histogram)
+    density: bool, optional; default = False
+        number of samples if False, normalized if True (see np.histogram)
+    multiplier: numeric, optional; default = 1
+        A scalar to multiple all the counts by
     invert: bool, optional; default = False
         If True, all frequencies are multiplied by -1 to flip upside down
     engine: str, optional; default = 'holoviews'
         Which plotting engine is to be used. Defaults to holoviews
         Currently supported: ['holoviews']
     """
-    frequencies, edges = np.histogram(data, bins, range)
+    frequencies, edges = np.histogram(data, bins, range, density=density)
     if invert:
         frequencies *= -1
+    frequencies = frequencies * multiplier
     if engine == 'holoviews':
         hist = _histogram_holoviews(edges, frequencies)
     else:

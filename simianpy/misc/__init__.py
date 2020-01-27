@@ -9,3 +9,4 @@ Modules
     logging
 """
 from .logging import getLogger
+from .binary_digitize import binary_digitize
