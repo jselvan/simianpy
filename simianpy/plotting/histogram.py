@@ -1,3 +1,5 @@
+from .util import get_ax
+
 import numpy as np
 import matplotlib.pyplot as plt 
 
@@ -8,13 +10,18 @@ except ImportError:
 else:
     from holoviews import opts, dim
 
+default_params = {
+    'matplotlib': {},
+    'holoviews': {}
+}
+
 def _histogram_holoviews(edges, frequencies):
     if hv is None:
         raise ImportError("holoviews module could not be imported. use a different engine")
     hist = hv.Histogram((edges, frequencies))
     return hist
 
-def Histogram(data, bins=10, range=None, density=False, multiplier=1, invert=False, engine='holoviews'):
+def Histogram(data, bins=10, range=None, density=False, proportion=False, multiplier=1, invert=False, engine='holoviews', ax=None, params={}):
     """ A convenience function for generating histograms
 
     Parameters
@@ -26,7 +33,15 @@ def Histogram(data, bins=10, range=None, density=False, multiplier=1, invert=Fal
     range: (float, float), optional; default = None
         Lower and upper bounds of the bins (see np.histogram)
     density: bool, optional; default = False
-        number of samples if False, normalized if True (see np.histogram)
+        number of samples if False, density if True (see np.histogram)
+        density and proportion cannot both be True
+        density is such that the area under the histogram is 1 
+        np.sum(frequencies * np.diff(edges)) == 1
+    proportion: bool, optional; default = False
+        number of samples if False, density if True (see np.histogram)
+        density and proportion cannot both be True
+        proportion is such that the sum of bar heights is 1 
+        np.sum(frequencies) == 1
     multiplier: numeric, optional; default = 1
         A scalar to multiple all the counts by
     invert: bool, optional; default = False
@@ -34,13 +49,29 @@ def Histogram(data, bins=10, range=None, density=False, multiplier=1, invert=Fal
     engine: str, optional; default = 'holoviews'
         Which plotting engine is to be used. Defaults to holoviews
         Currently supported: ['holoviews']
+    
+    Returns
+    -------
+    if 'engine' is 'holoviews', returns hv.Histogram
+    if 'engine' is 'matplotlib', returns ax
     """
-    frequencies, edges = np.histogram(data, bins, range, density=density)
+    data = np.asarray(data)
+
+    if proportion and density:
+        raise ValueError("proportion and density cannot both be enabled")
+
+    weights = np.ones_like(data)/data.size if proportion else np.ones_like(data)
+    frequencies, edges = np.histogram(data, bins, range, density=density, weights=weights)
+
     if invert:
         frequencies *= -1
     frequencies = frequencies * multiplier
     if engine == 'holoviews':
         hist = _histogram_holoviews(edges, frequencies)
+    elif engine == 'matplotlib':
+        ax = get_ax(ax)
+        ax.hist(data, bins=bins, range=range, density=density, weights=weights, **params)
+        
     else:
         raise ValueError(f"Engine not implemented: {engine}. Choose one of: ['holoviews']")
 

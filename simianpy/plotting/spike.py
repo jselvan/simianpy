@@ -62,8 +62,8 @@ else:
 #     pass
 
 default_raster_eventplot_params = dict(color='k')
-default_spikedensity_line_params = dict(color='r')
-default_spikedensity_hist_params = dict(bins=50)
+default_PSTH_line_params = dict(color='r')
+default_PSTH_hist_params = dict(bins=50)
 
 def Raster(data, ax=None, eventplot_params={}, **kwargs):
     ax = get_ax(ax)
@@ -71,10 +71,11 @@ def Raster(data, ax=None, eventplot_params={}, **kwargs):
     ax.eventplot(data,**eventplot_params)
     return ax
 
-def SpikeDensity(data, ax=None, line_params={}, hist_params={}, **kwargs):
+def PSTH(data, ax=None, line_params={}, hist_params={}, sampling_rate=1e3, **kwargs):
     ax = get_ax(ax)
-    line_params = ChainMap(line_params, default_spikedensity_line_params)
+    line_params = ChainMap(line_params, default_PSTH_line_params)
     counts, bins = np.histogram(np.concatenate(data), **hist_params)
+    counts = counts / (np.diff(bins)/sampling_rate) / len(data)
     xticks = np.mean([bins[:-1], bins[1:]],axis=0)
     ax.plot(xticks, counts, **line_params)
     return ax

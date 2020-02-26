@@ -13,4 +13,4 @@ Modules
 
 from .histogram import Histogram
 from .regression import Regression
-from .spike import SpikeDensity, Raster
+from .spike import PSTH, Raster
