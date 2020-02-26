@@ -35,6 +35,7 @@ class FFT:
         return len(self.data)
     @property
     def power(self):
+        #TODO: rewrite so that this function is applied to a 1D vector only? (use pd.DataFrame.apply for multiple variables)
         columns = None
         if isinstance(self.data, pd.DataFrame):
             data = self.data.values.T

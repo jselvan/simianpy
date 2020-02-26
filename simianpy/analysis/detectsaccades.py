@@ -1,3 +1,5 @@
+from ..misc import binary_digitize
+
 from itertools import product
 
 import numpy as np
@@ -29,10 +31,14 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
         saccade amplitude, direction and duration will be computed
         peak radial velocity is computed as max velocity during saccade
         latency will be provided if eyedata has a timedelta index
-    
+
     Notes
     -----
     direction is computed as np.arctan2(delta_y, delta_x)
+        ^ = 0 rads
+        > = +pi/2 rads
+        < = -pi/2 rads
+        v = +/-pi rads
 
     Examples
     --------
@@ -61,15 +67,15 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
         raise ValueError(f"Method must be one of ['radial', 'horizontal', 'vertical'] not {method}")
 
     velocity.rename('velocity')
+    #TODO: write a general function that accomplishes this (can be used for analog TTL, etc) 
+    # onset, offset = binary_digitize(velocity.abs(), velocity_threshold)
     saccade = velocity.abs() > velocity_threshold
-
-    #TODO: write a general function that accomplishes this (can be used for analog TTL, etc)
     onset = saccade & (saccade != saccade.shift()) & ~saccade.shift().isna()
     offset = ~saccade & (saccade != saccade.shift()) & ~saccade.shift().isna()
 
     onset = saccade[onset].index
     offset = saccade[offset].index
-    
+
     if onset.size != offset.size:
         if onset.size - offset.size == 1:
             onset = onset[:-1] # exclude last saccade if offset not detected
@@ -83,12 +89,12 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
         'onset_t': onset,
         'offset_t': offset
     })
-    
+
     saccade_data['delta_t'] = saccade_data['offset_t'] - saccade_data['onset_t']
 
     if duration_threshold is not None:
         saccade_data = saccade_data[saccade_data['delta_t'] > duration_threshold]
-    
+
     def get_saccade_metrics(saccade):
         times = {'onset': saccade.onset_t, 'offset': saccade.offset_t}
         components = {'x':'eyeh', 'y':'eyev'}
@@ -98,12 +104,12 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
         }
         data['peak_radial_velocity'] = diff.loc[slice(saccade.onset_t, saccade.offset_t), 'radial'].max()
         return pd.Series(data)
-    
+
     if len(saccade_data) > 0:
         saccade_data = saccade_data.join(
             saccade_data.apply(get_saccade_metrics, axis=1)
         )
-    
+
         saccade_data['delta_x'] = saccade_data['offset_x'] - saccade_data['onset_x']
         saccade_data['delta_y'] = saccade_data['offset_y'] - saccade_data['onset_y']
 

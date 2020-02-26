@@ -29,4 +29,5 @@ def DetectSpikes(data, threshold = -20, negative = True):
     ax.plot(lfp_raw)
     ax.plot(spk.index, lfp_raw.loc[spk.index], 'x')
     """
+    #TODO implement spike detection
     scipy.signal.find_peaks( -data if negative else data, height = -threshold if negative else threshold)
