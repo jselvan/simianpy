@@ -91,7 +91,7 @@ class BehaviouralData:
         trialinfo_df.index.name = 'trialid'
         return trialinfo_df
     
-    def get_trial_contdata(self, tracelength=None, start='trialstart', end='trialend', pad=(None, None), cols=None, relative_timestamps=True, dropna=False):
+    def get_trial_contdata(self, tracelength=None, start='trialstart', end='trialend', pad=(None, None), cols=None, relative_timestamps=True, dropna=False, trial_info=None):
         """Get eye traces for each trial
 
         Parameters
@@ -112,6 +112,9 @@ class BehaviouralData:
             if true, timestamps are subtracted by start value
         dropna: boolean, default: False
             if true, any trials with timestamps in start or end that are nan values will be dropped 
+        trial_info: pd.DataFrame, default: None
+            Used to override self-generated trial_info if necessary
+            if None, self.get_trial_info() is used
         
         Returns
         -------
@@ -119,8 +122,9 @@ class BehaviouralData:
         """
         if self.contdata is None:
             raise ValueError(f"Must provide self.contdata if you want self.get_trial_contdata")
-
-        trial_info = self.get_trial_info()
+        
+        if trial_info is None:
+            trial_info = self.get_trial_info()
         trial_info['slice_start'] = trial_info[start]
         trial_info['slice_end'] = trial_info[end]
 
@@ -154,3 +158,13 @@ class BehaviouralData:
         names = ('trialid', 'condition', 'outcome', *self.contdata.index.names)
         trial_contdata_df = pd.concat(trial_contdata, names=names)
         return trial_contdata_df
+
+#TODO: implement getting spike_data from behaviouraldata? Or should I make a parent class for this, and subclass behavioural data separately from one that can do more?
+# def get_spikes_by_event(event_timestamps, spike_data, pad=(None,None)):
+#     left, right = pad
+#     def get_spike(timestamp):
+#         spike = spike_data.loc[slice(timestamp+left,timestamp+right)]
+#         spike_timestamps = (spike.index - timestamp).total_seconds() * 1e3
+#         return spike_timestamps
+#     return {event: get_spike(timestamp) for event, timestamp in event_timestamps.items()}
+        

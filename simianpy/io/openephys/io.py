@@ -140,18 +140,17 @@ class OpenEphys(File):
     
     def _parse_spike_data(self, spk_data):
         header = json.loads(spk_data['header'])
-        sample_in_microseconds = f"{1e6/header['sampleRate']:.3f}U"
+        sample_in_microseconds = f"{1e6/float(header['sampleRate']):.3f}U"
         start_time = header['date_created']
         return pd.DataFrame(
-            spk_data['spikes'],
+            spk_data['spikes'].squeeze(),
             columns = pd.timedelta_range(0, periods = spk_data['spikes'].shape[1], freq = sample_in_microseconds),
             index = pd.MultiIndex.from_arrays(
                 [
-                    [spk_data['Header']['Unit']]*spk_data['Timestamps'].size, 
-                    spk_data['sortedId'],
-                    self.read_timestamps(spk_data['Timestamps'], start = start_time)
+                    spk_data['sortedId'].squeeze(),
+                    self.read_timestamps(spk_data['timestamps'].squeeze(), start = start_time)
                 ],
-                names = ('Channel', 'Unit', 'Timestamps')
+                names = ('Unit', 'Timestamp')
             )
         )
 
