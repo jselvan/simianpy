@@ -68,11 +68,10 @@ def Histogram(data, bins=10, range=None, density=False, proportion=False, multip
     frequencies = frequencies * multiplier
     if engine == 'holoviews':
         hist = _histogram_holoviews(edges, frequencies)
+        return hist
     elif engine == 'matplotlib':
         ax = get_ax(ax)
         ax.hist(data, bins=bins, range=range, density=density, weights=weights, **params)
-        
+        return ax
     else:
-        raise ValueError(f"Engine not implemented: {engine}. Choose one of: ['holoviews']")
-
-    return hist
+        raise ValueError(f"Engine not implemented: {engine}. Choose one of: ['holoviews','matplotlib']")
