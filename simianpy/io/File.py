@@ -85,7 +85,6 @@ class File():
         except NotImplementedError:
             self.logger.warning(f"The 'close' method is not implemented for this class. File closing may not be handled properly", exc_info=True)
             
-    
     def open(self):
         raise NotImplementedError
 
