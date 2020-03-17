@@ -67,23 +67,9 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
         raise ValueError(f"Method must be one of ['radial', 'horizontal', 'vertical'] not {method}")
 
     velocity.rename('velocity')
-    #TODO: write a general function that accomplishes this (can be used for analog TTL, etc) 
-    # onset, offset = binary_digitize(velocity.abs(), velocity_threshold)
     saccade = velocity.abs() > velocity_threshold
-    onset = saccade & (saccade != saccade.shift()) & ~saccade.shift().isna()
-    offset = ~saccade & (saccade != saccade.shift()) & ~saccade.shift().isna()
-
-    onset = saccade[onset].index
-    offset = saccade[offset].index
-
-    if onset.size != offset.size:
-        if onset.size - offset.size == 1:
-            onset = onset[:-1] # exclude last saccade if offset not detected
-        else:
-            raise ValueError(
-                f"Number of onsets {onset.size} and offsets {offset.size} \
-                must be the same or differ by 1 (edge case where the last \
-                offset does not occur within the trace)")
+    onset, offset = binary_digitize(saccade)
+    onset, offset = saccade[onset].index, saccade[offset].index
 
     saccade_data = pd.DataFrame({
         'onset_t': onset,

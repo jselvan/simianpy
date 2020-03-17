@@ -19,8 +19,8 @@ def binary_digitize(data, threshold=None, errors=True):
 
     Notes
     -----
-    onset is defined as being above threshold, or being true
-    offset is defined as being equal to or below threshold, or being false
+    onset is defined as the first sample being above threshold, or being true
+    offset is defined as the first sample being equal to or below threshold, or being false
 
     Example
     -------
@@ -53,4 +53,6 @@ def binary_digitize(data, threshold=None, errors=True):
                 f"Number of onsets {onsets.size} and offsets {offsets.size} \
                 must be the same or differ by 1 due to edge cases"
             )
+    
+    onsets, offsets = onsets+1, offsets+1 # corrects for off-by-one error
     return onsets, offsets
