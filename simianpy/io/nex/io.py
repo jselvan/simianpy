@@ -22,7 +22,7 @@ class Nex(File):
     ----------
     filename: str or Path
     mode: str, optional, default: 'r+'
-        Must be one of ['r+','w']
+        Must be one of ['r', 'r+','w']
     start_time: pd.Timestamp, optional, default: 0
         If you wish to provide a specific start time - provide a pandas Timestamp for the start time of the recording using pd.to_datetime
     useNumpy: bool, optional, default: True
@@ -50,7 +50,7 @@ class Nex(File):
     description = """ """
     extension = ['.nex', '.nex5']
     default_mode = 'r+'
-    modes = ['r+', 'w']
+    modes = ['r', 'r+', 'w']
     isdir = False
     vartypes_dict = {
         0: 'neuron',
@@ -71,7 +71,7 @@ class Nex(File):
         self.timestampFrequency = params.get('timestampFrequency', None)
 
     def open(self):
-        if self.mode == 'r+':
+        if self.mode in ['r','r+']:
             data = load(self.filename, useNumpy = self.useNumpy)
             if self.timestampFrequency is None:
                 self.timestampFrequency = data['FileHeader']['Frequency']

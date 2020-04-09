@@ -11,10 +11,16 @@ from .intanutil.data_to_result import data_to_result
 
 import sys, os, time
 from pathlib import Path
+from tempfile import TemporaryFile
 
+try:
+    import psutil
+except ImportError:
+    psutil = None
+import h5py
 import numpy as np
 
-def read_data(filename, notch = False, logger = None):
+def read_data(filename, notch=False, logger=None, chunksize=None, use_cache=False, cache_path=None):
     """
     Read Intan RHS format files
 
@@ -25,6 +31,7 @@ def read_data(filename, notch = False, logger = None):
     logger (logger or None; default = None) -- used for printing to screen and logging in .log file.  If None, a logger is initialized with log file sharing a name with RHS file
     notch (bool; default = False) -- if True and if software notch filter was selected during recording, reapply notch filter to amplifier data. Note the implementation of the notch filter used here seems very performance intensive and may considerably slow file reading.
     """
+    #TODO: update docstring
     #TODO: Implement caching or memory mapping for opening of large files 
     tic = time.time() 
 
@@ -64,6 +71,15 @@ def read_data(filename, notch = False, logger = None):
 
         logger.info(f"File contains {record_time:0.3f} seconds of data.  Amplifiers were sampled at {header['sample_rate']/1e3:0.2f} kS/s.")
 
+        # TODO: Implement chunking?
+        # if chunksize is None:
+        #     if psutil is not None:
+        #         free_mem = psutil.virtual_memory().free
+        #         chunksize = free_mem//bytes_per_block
+        #     else:
+        #         logger.info("psutil could not be imported. chunksize will be set to whole file.")
+        #         chunksize = num_data_blocks
+
         # define the data type for the data based on what channels are present
         dtype = [('t', np.dtype('<i'), 128)]
         if header['num_amplifier_channels'] > 0:
@@ -96,9 +112,9 @@ def read_data(filename, notch = False, logger = None):
             raise Exception(error_msg)
 
     # Parse out the data and scale to appropriate units 
+    logger.info(f'Storing data in a {"cache" if use_cache else "dict"}.')
+    data = h5py.File(cache_path or TemporaryFile()) if use_cache else {}
     logger.debug('Parsing data...')
-    data = {}
-    data['t'] = temp_data['t'].flatten()
 
     if header['num_amplifier_channels'] > 0:  
         logger.debug('Scaling amplifier data to microvolts...')                   
@@ -147,14 +163,15 @@ def read_data(filename, notch = False, logger = None):
         )
 
     logger.debug('Checking for gaps in timestamps...')
-    gaps = np.diff(data['t']) != 1
+    timestamps = temp_data['t'].flatten()
+    gaps = np.diff(timestamps) != 1
     if not gaps.any():
         logger.info('No missing timestamps in data.')
     else:
         logger.warn(f'Warning: {gaps.sum()} gaps in timestamp data found.  Time scale will not be uniform!')
 
     logger.debug('Scaling timestamps using sampling rate...')
-    data['t'] = data['t'] / header['sample_rate']
+    data['t'] = timestamps / header['sample_rate']
     
     if notch:
         logger.debug('Applying notch filter')

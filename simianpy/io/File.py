@@ -56,8 +56,10 @@ class File():
     
     def _close_data_cache(self):
         if self.use_cache:
-            self._data.close()
-        del self._data
+            if hasattr(self, '_data'):
+                self._data.close()
+        if hasattr(self, '_data'):
+            del self._data
         
     def _read_recipe(self, recipe_path):
         recipe_path = Path(recipe_path)
