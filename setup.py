@@ -18,10 +18,16 @@ setup(
         'matplotlib',
         'pyyaml',
         'h5py',
-        'tables'
+        'tables',
+        'tqdm',
+        'click'
     ],
     extras_require = {
-        'FULL': ['colorama','holoviews','bokeh','tqdm','ipython']
+        'FULL': ['colorama','holoviews','bokeh','ipython']
     },
+    entry_points='''
+        [console_scripts]
+        simi=simianpy.scripts:simi
+    ''',
     zip_safe=False
 )
