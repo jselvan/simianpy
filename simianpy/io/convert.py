@@ -7,7 +7,7 @@ import os
 import time
 import warnings
 
-from .nex import NexWriter
+from .nex.nexfile import NexWriter
 from .openephys import load
 from ..misc import getLogger
 

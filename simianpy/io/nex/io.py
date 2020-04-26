@@ -15,6 +15,11 @@ def load(filename, useNumpy = True):
     reader = Reader(useNumpy=useNumpy)
     return reader.ReadNexFile(filename)
 
+def read_header(filename):
+    reader = Reader()
+    header = reader.ReadHeader(filename)
+    return header
+
 class Nex(File):
     """Interface for Neuroexplorer files ('.nex', '.nex5')
 

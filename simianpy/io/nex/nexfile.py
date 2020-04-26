@@ -66,8 +66,9 @@ class Reader(object):
         Constructor
         :param useNumpy: option to use numpy to read data arrays.
         """
+        self.extension = None
         self.theFile = None
-        self.fileData = None
+        self.fileData = {}
         self.useNumpy = useNumpy
         self.fromTicksToSeconds = 1
         
@@ -77,22 +78,13 @@ class Reader(object):
         :param filePath: full path of file
         :return: file data
         """
-        extension = os.path.splitext(filePath)[1].lower()
-        if extension == '.nex':
+        self.extension = os.path.splitext(filePath)[1].lower()
+        if self.extension == '.nex':
             return self.ReadNexFile(filePath)
-        self.fileData = {}
+
         self.theFile = open(filePath, 'rb')
 
-        # read file header
-        self.fileData['FileHeader'] = self._ReadNex5FileHeader()
-        self.fileData['Variables'] = []
-
-        # read variable headers and create variables
-        for varNum in range(self.fileData['FileHeader']['NumVars']):
-            var = {'Header': self._ReadNex5VarHeader()}
-            self.fileData['Variables'].append(var)
-
-        # read variable data
+        self.ReadHeader()
         self._ReadData()
 
         # read metadata
@@ -118,23 +110,38 @@ class Reader(object):
         :param filePath:
         :return: file data
         """
-        extension = os.path.splitext(filePath)[1].lower()
-        if extension == '.nex5':
+        self.extension = os.path.splitext(filePath)[1].lower()
+        if self.extension == '.nex5':
             return self.ReadNex5File(filePath)
 
-        self.fileData = {}
         self.theFile = open(filePath, 'rb')
 
-        self.fileData['FileHeader'] = self._ReadFileHeader()
-        self.fileData['Variables'] = []
-
-        for varNum in range(self.fileData['FileHeader']['NumVars']):
-            var = {'Header': self._ReadVarHeader()}
-            self.fileData['Variables'].append(var)
-
+        self.ReadHeader()
         self._ReadData()
 
         self.theFile.close()
+        return self.fileData
+
+    def ReadHeader(self, filePath=None):
+        if self.theFile is None:
+            self.theFile = open(filePath, 'rb')
+            self.extension = os.path.splitext(filePath)[1].lower()
+
+        # read file header
+        if self.extension == '.nex':
+            self.fileData['FileHeader'] = self._ReadFileHeader()
+        elif self.extension == '.nex5':
+            self.fileData['FileHeader'] = self._ReadNex5FileHeader()
+        self.fileData['Variables'] = []
+
+        # read variable headers and create variables
+        for varNum in range(self.fileData['FileHeader']['NumVars']):
+            if self.extension == '.nex':
+                var = {'Header': self._ReadVarHeader()}
+            elif self.extension == '.nex5':
+                var = {'Header': self._ReadNex5VarHeader()}
+            self.fileData['Variables'].append(var)
+        
         return self.fileData
 
     def _ReadData(self):

@@ -1,2 +1,1 @@
-from .nexfile import Reader, NexWriter
-from .io import Nex, load
+from .io import Nex, load, read_header

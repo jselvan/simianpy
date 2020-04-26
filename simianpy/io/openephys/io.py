@@ -1,5 +1,5 @@
 from .openephys import load
-from ..nex import NexWriter, Nex
+from ..nex import Nex
 from ..File import File
 
 from collections import defaultdict
