@@ -70,6 +70,7 @@ def read_data(filename, notch=False, logger=None, chunksize=None, use_cache=Fals
         record_time = 128 * num_data_blocks / header['sample_rate']
 
         logger.info(f"File contains {record_time:0.3f} seconds of data.  Amplifiers were sampled at {header['sample_rate']/1e3:0.2f} kS/s.")
+        #TODO: convert this function into a class - expose code up to this part for describing the file only in REPL or commandline script
 
         # TODO: Implement chunking?
         # if chunksize is None:

@@ -22,8 +22,11 @@ def DetectFixations(eye_data, velocity_threshold=2, duration_threshold=None, sam
     if duration_threshold is not None:
         fixation_data = fixation_data[fixation_data['duration_dt'] > duration_threshold]
     
-    if hasattr(fixation_data['duration_dt'], 'dt') and hasattr(fixation_data['onset_t'].dt, 'total_seconds'):
+    if hasattr(fixation_data['duration_dt'], 'dt') and hasattr(fixation_data['duration_dt'].dt, 'total_seconds'):
         fixation_data['duration'] = fixation_data['duration_dt'].dt.total_seconds() * 1e3
+
+    if fixation_data.empty:
+        return fixation_data
 
     fixation_data = fixation_data.join(
         fixation_data.apply(

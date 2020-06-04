@@ -61,12 +61,17 @@ def Histogram(data, bins=10, range=None, density=False, proportion=False, multip
         raise ValueError("proportion and density cannot both be enabled")
 
     weights = np.ones_like(data)/data.size if proportion else np.ones_like(data)
+    if invert:
+        weights *= -1
+    weights = weights * multiplier
     frequencies, edges = np.histogram(data, bins, range, density=density, weights=weights)
 
-    if invert:
-        frequencies *= -1
-    frequencies = frequencies * multiplier
     if engine == 'holoviews':
+        if invert:
+            frequencies *= -1
+        frequencies = frequencies * multiplier
+        if proportion or density:
+            raise NotImplementedError
         hist = _histogram_holoviews(edges, frequencies)
         return hist
     elif engine == 'matplotlib':

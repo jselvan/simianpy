@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def kde_plot_2d(x, y, weights, data=None, range=None, xticks=None, yticks=None, resolution=100, ax=None, im_kwargs=dict()):
+def kde_plot_2d(x, y, weights, data=None, range=None, xticks=None, yticks=None, resolution=100, bw_method=None, ax=None, im_kwargs=dict()):
     if data is not None:
         x, y = data[x], data[y]
         if weights is not None:
@@ -20,15 +20,16 @@ def kde_plot_2d(x, y, weights, data=None, range=None, xticks=None, yticks=None, 
         yticks = np.linspace(y.min(), y.max(), resolution)
     
     xy = np.stack([x,y])
-    pdf = gaussian_kde(xy,weights=weights)
-    pdf.set_bandwidth(bw_method=pdf.factor / 5.)
+    pdf = gaussian_kde(xy,weights=weights,bw_method=bw_method)
+    # pdf.set_bandwidth(bw_method=pdf.factor / 5.)
 
     xx, yy = np.meshgrid(xticks, yticks)
     zz = np.rot90(np.reshape(pdf((np.ravel(xx), np.ravel(yy))), xx.shape).T)
     # bounds = [xy[0].min(), xy[0].max(), xy[1].min(), xy[1].max()]
     bounds = xticks.min(), xticks.max(), yticks.min(), yticks.max()
     # print(bounds)
-    ax.imshow(zz, extent=bounds, **im_kwargs)
+    im = ax.imshow(zz, extent=bounds, **im_kwargs)
+    return im
 
 
 # class from here: http://nbviewer.ipython.org/gist/tillahoffmann/f844bce2ec264c1c8cb5
