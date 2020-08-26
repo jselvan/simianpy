@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd 
 
 def get_agg_data(grouped_data, agg_method):
     if agg_method == 'mean':
@@ -18,6 +19,10 @@ def get_error(grouped_data, error_method):
             error = grouped_data.apply(lambda x: x.std()/(x.count()**.5))
         elif error_method.lower() == 'std':
             error = grouped_data.std()
+        elif error_method.lower() == 'iqr':
+            median = grouped_data.median()
+            error = pd.DataFrame({'lower':median-grouped_data.quantile(.25), 'upper':grouped_data.quantile(.75) - median})
+            # print(error, grouped_data.quantile([.25,.5,.75]))
         else:
             raise NotImplementedError()
     
@@ -68,9 +73,12 @@ class Bar:
         else:
             grouped_data = data.groupby(self.cluster_var)
             for i, cluster in enumerate(self.clusters):
-                if cluster not in grouped_data.groups:
+                # if cluster not in grouped_data.groups:
+                #     continue
+                try:
+                    cluster_data = grouped_data.get_group(cluster)
+                except KeyError:
                     continue
-                cluster_data = grouped_data.get_group(cluster)
                 self._plot_cluster(cluster_data, ax, cluster_name=cluster, offset=i)
 
         ax.set_xticks(self.xtick_coords)
@@ -106,7 +114,7 @@ class Bar:
             bottoms = np.zeros(len(x))
         y = y.reindex(self.xticklabels).values
         if yerr is not None:
-            yerr = yerr.reindex(self.xticklabels).values
+            yerr = yerr.reindex(self.xticklabels).values.T
 
         # if bottoms is None:
         #     bottoms = np.zeros(len(x))

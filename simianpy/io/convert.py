@@ -14,7 +14,7 @@ from ..misc import getLogger
 import numpy as np
 import scipy
 
-def ephys2nex(ephys_path, nexfile_path, SamplingRate_spikes = 3e4, SamplingRate_continuous = 1e3, num_channels = 32, NPointsWave = 40, PrethresholdTimeInSeconds = 0.533, spike_prefix = 'Sep115', LFP_prefix = '110_CH', eye_channels = {'eyeh': "110_ADC1.continuous", 'eyev': "110_ADC2.continuous"}, logger = None):
+def ephys2nex(ephys_path, nexfile_path, SamplingRate_spikes = 3e4, SamplingRate_continuous = 1e3, num_channels = 96, NPointsWave = 40, PrethresholdTimeInSeconds = 0.533, spike_prefix = 'Sep107', LFP_prefix = '100_CH', eye_channels = {'eyeh': "100_ADC1.continuous", 'eyev': "100_ADC2.continuous"}, logger = None):
     """Loads OpenEphys data found at 'ephys_path' and outputs a '.nex' file at path 'nexfile_path'
 
     Parameters
@@ -85,7 +85,7 @@ def ephys2nex(ephys_path, nexfile_path, SamplingRate_spikes = 3e4, SamplingRate_
 
             idx = (spike_data['sortedId'].squeeze() == unit_id)
 
-            neuronTs = spike_data['timestamps'][idx]
+            neuronTs = spike_data['timestamps'][idx].squeeze()
             WaveformValues = spike_data['spikes'][idx]
 
             try:
@@ -110,18 +110,18 @@ def ephys2nex(ephys_path, nexfile_path, SamplingRate_spikes = 3e4, SamplingRate_
             unit = unit_num
             )
         
-        #add continuous data
-        continuous_fpath = os.path.join(ephys_path, f"{LFP_prefix}{i + 1}.continuous")
-        continuous_data = load(continuous_fpath, logger = logger)
+        # #add continuous data
+        # continuous_fpath = os.path.join(ephys_path, f"{LFP_prefix}{i + 1}.continuous")
+        # continuous_data = load(continuous_fpath, logger = logger)
 
-        AD_name = f"AD{i + 1:02d}"
+        # AD_name = f"AD{i + 1:02d}"
 
-        #decimates by factor 30, using Chebyshev type I infinite impulse response filter of order 8 (in theory this is the same as MATLAB decimate)
-        writer.AddContVarWithSingleFragment(name = AD_name,
-        timestampOfFirstDataPoint = continuous_data['timestamps'][0],
-        SamplingRate = SamplingRate_continuous,
-        values = scipy.signal.decimate(continuous_data['data'], 30)
-        )
+        # #decimates by factor 30, using Chebyshev type I infinite impulse response filter of order 8 (in theory this is the same as MATLAB decimate)
+        # writer.AddContVarWithSingleFragment(name = AD_name,
+        # timestampOfFirstDataPoint = continuous_data['timestamps'][0],
+        # SamplingRate = SamplingRate_continuous,
+        # values = scipy.signal.decimate(continuous_data['data'], 30)
+        # )
     
     #add eye channels
     logger.info("\nFor eye channel:")
@@ -158,7 +158,7 @@ def ephys2nex(ephys_path, nexfile_path, SamplingRate_spikes = 3e4, SamplingRate_
     #     if markers[i:(i+5)] == [1,2,4,8,16]:
     #         markers[i:(i+5)] = [300]*5
     
-    writer.AddMarker(name = 'Strobed', timestamps = np.array(timestamps), fieldNames = np.array(['DIO']), markerFields = np.array([[f'{int(marker):03d}' for marker in markers]]))
+    writer.AddMarker(name = 'Strobed', timestamps = np.array(timestamps).flatten(), fieldNames = np.array(['DIO']), markerFields = np.array([[f'{int(marker):03d}' for marker in markers]]))
     writer.WriteNexFile(nexfile_path)
     
     logger.info(f'\nSuccessfully wrote nexfile at path: {nexfile_path}')
