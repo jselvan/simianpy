@@ -14,4 +14,4 @@ Modules
 from .histogram import Histogram
 from .regression import Regression
 from .spike import PSTH, Raster
-from .bar import Bar
+from .catplot import Bar, Line, CatPlot, ViolinPlot

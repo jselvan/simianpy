@@ -27,9 +27,11 @@ def get_error(grouped_data, error_method):
             raise NotImplementedError()
     
     return error
-
-class Bar:
-    def __init__(self, data, agg, cluster_var=None, axes_var=None, stack_var=None, agg_method='mean', error_method='se', bar_width=None, ax=None, cluster_params={}, stack_params={}):
+class CatPlot:
+    def __init__(self, data, agg, cluster_var=None, axes_var=None, stack_var=None, 
+    agg_method='mean', error_method='se', x_offset=None, ax=None, cluster_params={}, 
+    stack_params={}, swarm=False, swarm_params={}, swarm_cluster_params={}, swarm_stack_params={}, 
+    swarm_hist_params={}, violin=False):
         self.agg = agg
         self.agg_method = agg_method
         self.error_method = error_method
@@ -40,6 +42,13 @@ class Bar:
 
         self.cluster_params = cluster_params
         self.stack_params = stack_params
+        self.swarm_params = swarm_params
+        self.swarm_cluster_params = swarm_cluster_params
+        self.swarm_stack_params = swarm_stack_params
+        self.swarm_hist_params = swarm_hist_params
+
+        self.swarm = swarm
+        self.violin = violin
 
         self.xticklabels = list(data.groupby(self.agg).groups.keys())
         self.nbars = len(self.xticklabels)
@@ -49,11 +58,11 @@ class Bar:
             self.clusters = list(data.groupby(self.cluster_var).groups.keys())
         
         self.nclusters = len(self.clusters)
-        self.bar_width = 1/(self.nclusters+1) if bar_width is None else bar_width
+        self.x_offset = 1/(self.nclusters+1) if x_offset is None else x_offset
 
-        self.xtick_coords = np.arange(self.nbars) + (self.nclusters/2) * self.bar_width
+        self.xtick_coords = np.arange(self.nbars) + (self.nclusters/2) * self.x_offset
         # if self.nclusters % 2 == 0:
-        self.xtick_coords -= (self.bar_width/2)
+        self.xtick_coords -= (self.x_offset/2)
 
         if self.axes_var is None:
             self._plot_ax(data,ax)
@@ -105,9 +114,9 @@ class Bar:
             label = cluster_name, stack_name
 
         
-        # x_offset = offset*self.bar_width
+        # x_offset = offset*self.x_offset
         # x = [self.xticklabels.index(x)+x_offset for x in y.index]
-        x = np.arange(self.nbars) + offset*self.bar_width
+        x = np.arange(self.nbars) + offset*self.x_offset
         y = get_agg_data(data.groupby(self.agg), self.agg_method)
         yerr = get_error(data.groupby(self.agg), self.error_method)
         if bottoms is None:
@@ -120,6 +129,61 @@ class Bar:
         #     bottoms = np.zeros(len(x))
         # else:
         #     bottoms = [bottoms[self.xticklabels.index(x)] for x in y.index]
+        self._plot(ax=ax,x=x,y=y,yerr=yerr,label=label,bottoms=bottoms,cluster_name=cluster_name,stack_name=stack_name)
+        if self.swarm:
+            self._swarmplot(ax=ax,data=data,x=x,label=label,bottoms=bottoms,cluster_name=cluster_name,stack_name=stack_name)
+        if self.violin:
+            self._violinplot(ax=ax,data=data,x=x,label=label,bottoms=bottoms,cluster_name=cluster_name,stack_name=stack_name)
 
-        ax.bar(x, y, yerr=yerr, label=label, width=self.bar_width, bottom=bottoms, **self.cluster_params.get(cluster_name,{}), **self.stack_params.get(stack_name,{}))
         return bottoms + y
+    
+    def _violinplot(self,ax,data,x,label,bottoms,cluster_name,stack_name):
+        grouped_data = {key: data for key, data in data.groupby(self.agg)}
+        violin_data = []
+        xcoords = []
+        for xcoord, xlabel, bottom in zip(x, self.xticklabels, bottoms):
+            if xlabel in grouped_data:
+                violin_data.append(grouped_data[xlabel]+bottom)
+                xcoords.append(xcoord)
+        parts = ax.violinplot(violin_data,xcoords,widths=self.x_offset,showextrema=False)
+        # for pc in parts['bodies']:
+        #     pc.set_alpha(0.15)
+        for name, part in parts.items():
+            if name == 'bodies':
+                for pc in part:
+                    pc.set_alpha(0.15)
+            else:
+                pc.set_alpha(0.15)
+
+    def _swarmplot(self,ax,data,x,label,bottoms,cluster_name,stack_name):
+        for (_, group_data), xcoord in zip(data.groupby(self.agg),x):
+            y = group_data.values
+            y.sort()
+            xmin,xmax = xcoord-(0.5*self.x_offset),xcoord+(0.5*self.x_offset)
+            counts, edges = np.histogram(y,**self.swarm_hist_params)
+            x_ = np.concatenate([np.linspace(xmin,xmax,count+2)[1:-1] for count in counts])
+            bin_centers = np.mean([edges[1:],edges[:-1]],axis=0)
+            ax.scatter(x_,y,label=label,**self.swarm_params,**self.swarm_cluster_params.get(cluster_name,{}), **self.swarm_stack_params.get(stack_name,{}))
+
+    def _plot(self,ax,x,y,yerr,label,bottoms,cluster_name,stack_name):
+        return NotImplemented
+    
+class Bar(CatPlot):
+    def __init__(self,**kwargs):
+        if 'bar_width' in kwargs:
+            kwargs['x_offset'] = kwargs.pop('bar_width')
+        super().__init__(**kwargs)
+    def _plot(self,ax,x,y,yerr,label,bottoms,cluster_name,stack_name):
+        ax.bar(x, y, yerr=yerr, label=label, width=self.x_offset, bottom=bottoms, **self.cluster_params.get(cluster_name,{}), **self.stack_params.get(stack_name,{}))
+
+class Line(CatPlot):
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+    def _plot(self,ax,x,y,yerr,label,bottoms,cluster_name,stack_name):
+        ax.errorbar(x, y+bottoms, yerr=yerr, label=label, **self.cluster_params.get(cluster_name,{}), **self.stack_params.get(stack_name,{}))
+
+class ViolinPlot(CatPlot):
+    def __init__(self,**kwargs):
+        super().__init__(**kwargs)
+    def _plot(self,ax,x,y,yerr,label,bottoms,cluster_name,stack_name):
+        ax.violinplot()
