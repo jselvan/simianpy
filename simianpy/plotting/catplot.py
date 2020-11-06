@@ -17,6 +17,8 @@ def get_error(grouped_data, error_method):
     else:
         if error_method.lower() == 'se':
             error = grouped_data.apply(lambda x: x.std()/(x.count()**.5))
+        elif error_method.lower() == 'ci95':
+            error = grouped_data.apply(lambda x: 1.96*x.std()/(x.count()**.5))
         elif error_method.lower() == 'std':
             error = grouped_data.std()
         elif error_method.lower() == 'iqr':
@@ -29,7 +31,7 @@ def get_error(grouped_data, error_method):
     return error
 class CatPlot:
     def __init__(self, data, agg, cluster_var=None, axes_var=None, stack_var=None, 
-    agg_method='mean', error_method='se', x_offset=None, ax=None, cluster_params={}, 
+    agg_method='mean', error_method='se', x_offset=None, ax=None, clusters=None, cluster_params={}, 
     stack_params={}, swarm=False, swarm_params={}, swarm_cluster_params={}, swarm_stack_params={}, 
     swarm_hist_params={}, violin=False):
         self.agg = agg
@@ -55,7 +57,7 @@ class CatPlot:
         if self.cluster_var is None:
             self.clusters = None,
         else:
-            self.clusters = list(data.groupby(self.cluster_var).groups.keys())
+            self.clusters = clusters or list(data.groupby(self.cluster_var).groups.keys())
         
         self.nclusters = len(self.clusters)
         self.x_offset = 1/(self.nclusters+1) if x_offset is None else x_offset
@@ -146,8 +148,6 @@ class CatPlot:
                 violin_data.append(grouped_data[xlabel]+bottom)
                 xcoords.append(xcoord)
         parts = ax.violinplot(violin_data,xcoords,widths=self.x_offset,showextrema=False)
-        # for pc in parts['bodies']:
-        #     pc.set_alpha(0.15)
         for name, part in parts.items():
             if name == 'bodies':
                 for pc in part:

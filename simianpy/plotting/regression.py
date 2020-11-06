@@ -35,7 +35,7 @@ def _regression_holoviews(regression_output, fitline, scatter):
 
     return hv.Overlay(plots) if plots else None
 
-def Regression(x, y, data=None, drop_na=True, fitline=True, scatter=True, engine='holoviews', ax=None, fitline_kwargs={}, scatter_kwargs={}):
+def Regression(x, y, data=None, drop_na=True, fitline=True, scatter=True, engine='matplotlib', ax=None, fitline_kwargs={}, scatter_kwargs={}):
     """ A convenience function for generating a regression plot
 
     Parameters

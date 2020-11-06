@@ -21,7 +21,7 @@ def _histogram_holoviews(edges, frequencies):
     hist = hv.Histogram((edges, frequencies))
     return hist
 
-def Histogram(data, bins=10, range=None, density=False, proportion=False, multiplier=1, invert=False, engine='holoviews', ax=None, params={}):
+def Histogram(data, bins=10, range=None, density=False, proportion=False, multiplier=1, invert=False, engine='matplotlib', ax=None, params={}):
     """ A convenience function for generating histograms
 
     Parameters
@@ -42,6 +42,7 @@ def Histogram(data, bins=10, range=None, density=False, proportion=False, multip
         density and proportion cannot both be True
         proportion is such that the sum of bar heights is 1 
         np.sum(frequencies) == 1
+        if proportion is a numeric value, normalized to that instead
     multiplier: numeric, optional; default = 1
         A scalar to multiple all the counts by
     invert: bool, optional; default = False
@@ -60,7 +61,7 @@ def Histogram(data, bins=10, range=None, density=False, proportion=False, multip
     if proportion and density:
         raise ValueError("proportion and density cannot both be enabled")
 
-    weights = np.ones_like(data)/data.size if proportion else np.ones_like(data)
+    weights = np.ones_like(data)*proportion/data.size if proportion else np.ones_like(data)
     if invert:
         weights *= -1
     weights = weights * multiplier
