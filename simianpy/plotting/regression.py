@@ -1,5 +1,5 @@
-from ..analysis import LinearRegression
-from .util import get_ax
+from simianpy.analysis import LinearRegression
+from simianpy.plotting.util import get_ax
 
 import numpy as np
 import matplotlib.pyplot as plt 
@@ -10,6 +10,12 @@ except ImportError:
     hv = None
 else:
     from holoviews import opts, dim
+
+
+default_params = {
+    'matplotlib': {},
+    'holoviews': {}
+}
 
 def _regression_holoviews(regression_output, fitline, scatter):
     if hv is None:

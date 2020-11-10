@@ -35,7 +35,8 @@ ax1.axis('off')
 fig.tight_layout()
 fig.savefig('fig_.png')
 """
-from .util import get_ax, ax_formatting
+from simianpy.plotting.util import get_ax, ax_formatting
+from simianpy.analysis import PSTH
 
 from collections import ChainMap
 
@@ -62,8 +63,8 @@ import matplotlib.pyplot as plt
 #     pass
 
 default_raster_eventplot_params = dict(color='k')
-default_PSTH_line_params = dict(color='r')
-default_PSTH_hist_params = dict(bins=50)
+default_PSTHplot_line_params = dict(color='r')
+default_PSTHplot_PSTH_params = dict(bins=50, sampling_rate=1e3)
 
 def Raster(data, ax=None, eventplot_params={}, **kwargs):
     ax = get_ax(ax)
@@ -71,11 +72,13 @@ def Raster(data, ax=None, eventplot_params={}, **kwargs):
     ax.eventplot(data,**eventplot_params)
     return ax
 
-def PSTH(data, ax=None, line_params={}, hist_params={}, sampling_rate=1e3, **kwargs):
+def plot_PSTH(data, ax=None, plot='line', plot_params={}, PSTH_params={}, **kwargs):
     ax = get_ax(ax)
-    line_params = ChainMap(line_params, default_PSTH_line_params)
-    counts, bins = np.histogram(np.concatenate(data), **hist_params)
-    counts = counts / (np.diff(bins)/sampling_rate) / len(data)
-    xticks = np.mean([bins[:-1], bins[1:]],axis=0)
-    ax.plot(xticks, counts, **line_params)
+    xticks, counts = PSTH(**PSTH_params).compute(data)
+    if plot == 'line':
+        plot_params = ChainMap(plot_params, default_PSTHplot_line_params)
+        ax.plot(xticks, counts, **plot_params)
     return ax
+
+def plot_SDF(data, ax=None, plot='line', plot_params={}, SDF_params={}, **kwargs):
+    raise NotImplementedError

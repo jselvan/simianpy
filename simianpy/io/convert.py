@@ -7,9 +7,9 @@ import os
 import time
 import warnings
 
-from .nex.nexfile import NexWriter
-from .openephys import load
-from ..misc import getLogger
+from simianpy.io.nex.nexfile import NexWriter
+from simianpy.io.openephys import load
+from simianpy.misc import getLogger
 
 import numpy as np
 import scipy

@@ -14,4 +14,6 @@ from .behaviouraldata import BehaviouralData
 from .detectsaccades import DetectSaccades
 from .detectfixations import DetectFixations
 from .linear_regression import LinearRegression
+from .psth import PSTH
+from .spikedensity import SDF
 from .blink_mask import get_blink_mask

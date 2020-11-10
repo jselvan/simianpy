@@ -1,4 +1,4 @@
-from ..signal import Filter
+from simianpy.signal import Filter
 
 import numpy as np
 import scipy.signal

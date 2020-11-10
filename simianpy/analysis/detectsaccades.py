@@ -1,4 +1,4 @@
-from ..misc import binary_digitize
+from simianpy.misc import binary_digitize
 
 from itertools import product
 

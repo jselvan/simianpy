@@ -1,4 +1,4 @@
-from .util import get_ax
+from simianpy.plotting.util import get_ax
 
 import numpy as np
 import matplotlib.pyplot as plt 

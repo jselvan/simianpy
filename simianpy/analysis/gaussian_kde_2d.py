@@ -211,7 +211,7 @@ class GaussianKDE2D(object):
         Examples
         --------
         >>> x1 = np.array([-7, -5, 1, 4, 5.])
-        >>> kde = stats.GaussianKDE2D(x1)
+        >>> kde = stats.gaussian_kde(x1)
         >>> xs = np.linspace(-10, 10, num=50)
         >>> y1 = kde(xs)
         >>> kde.set_bandwidth(bw_method='silverman')

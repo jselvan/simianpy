@@ -1,4 +1,4 @@
-from ..misc import getLogger
+from simianpy.misc import getLogger
 
 import json
 import yaml
