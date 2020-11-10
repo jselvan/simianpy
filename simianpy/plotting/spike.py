@@ -42,12 +42,12 @@ from collections import ChainMap
 import numpy as np
 import matplotlib.pyplot as plt 
 
-try:
-    import holoviews as hv
-except ImportError:
-    hv = None
-else:
-    from holoviews import opts, dim
+# try:
+#     import holoviews as hv
+# except ImportError:
+#     hv = None
+# else:
+#     from holoviews import opts, dim
 
 # TODO: Implement holoviews
 # def _holoviews():

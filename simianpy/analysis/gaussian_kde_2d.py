@@ -1,43 +1,12 @@
 import numpy as np
 import matplotlib.pyplot as plt
 
-
-def kde_plot_2d(x, y, weights, data=None, range=None, xticks=None, yticks=None, resolution=100, bw_method=None, ax=None, im_kwargs=dict()):
-    if data is not None:
-        x, y = data[x], data[y]
-        if weights is not None:
-            weights = data[weights].values
-    
-    if range is not None:
-        (xmin, xmax), (ymin, ymax) = range
-        xticks = np.linspace(xmin, xmax, resolution)
-        yticks = np.linspace(ymin, ymax, resolution)
-
-    if xticks is None:
-        xticks = np.linspace(x.min(), x.max(), resolution)
-    
-    if yticks is None:
-        yticks = np.linspace(y.min(), y.max(), resolution)
-    
-    xy = np.stack([x,y])
-    pdf = gaussian_kde(xy,weights=weights,bw_method=bw_method)
-    # pdf.set_bandwidth(bw_method=pdf.factor / 5.)
-
-    xx, yy = np.meshgrid(xticks, yticks)
-    zz = np.rot90(np.reshape(pdf((np.ravel(xx), np.ravel(yy))), xx.shape).T)
-    # bounds = [xy[0].min(), xy[0].max(), xy[1].min(), xy[1].max()]
-    bounds = xticks.min(), xticks.max(), yticks.min(), yticks.max()
-    # print(bounds)
-    im = ax.imshow(zz, extent=bounds, **im_kwargs)
-    return im
-
-
 # class from here: http://nbviewer.ipython.org/gist/tillahoffmann/f844bce2ec264c1c8cb5
-class gaussian_kde(object):
+class GaussianKDE2D(object):
     """Representation of a kernel-density estimate using Gaussian kernels.
     Kernel density estimation is a way to estimate the probability density
     function (PDF) of a random variable in a non-parametric way.
-    `gaussian_kde` works for both uni-variate and multi-variate data.   It
+    `GaussianKDE2D` works for both uni-variate and multi-variate data.   It
     includes automatic bandwidth determination.  The estimation works best for
     a unimodal distribution; bimodal or multi-modal distributions tend to be
     oversmoothed.
@@ -50,7 +19,7 @@ class gaussian_kde(object):
         The method used to calculate the estimator bandwidth.  This can be
         'scott', 'silverman', a scalar constant or a callable.  If a scalar,
         this will be used directly as `kde.factor`.  If a callable, it should
-        take a `gaussian_kde` instance as only parameter and return a scalar.
+        take a `GaussianKDE2D` instance as only parameter and return a scalar.
         If None (default), 'scott' is used.  See Notes for more details.
     weights : array_like, shape (n, ), optional, default: None
         An array of weights, of the same shape as `x`.  Each value in `x`
@@ -59,7 +28,7 @@ class gaussian_kde(object):
     Attributes
     ----------
     dataset : ndarray
-        The dataset with which `gaussian_kde` was initialized.
+        The dataset with which `GaussianKDE2D` was initialized.
     d : int
         Number of dimensions.
     n : int
@@ -97,7 +66,7 @@ class gaussian_kde(object):
     Bandwidth selection strongly influences the estimate obtained from the KDE
     (much more so than the actual shape of the kernel).  Bandwidth selection
     can be done by a "rule of thumb", by cross-validation, by "plug-in
-    methods" or by other means; see [3]_, [4]_ for reviews.  `gaussian_kde`
+    methods" or by other means; see [3]_, [4]_ for reviews.  `GaussianKDE2D`
     uses a rule of thumb, the default is Scott's Rule.
     Scott's Rule [1]_, implemented as `scotts_factor`, is::
         n**(-1./(d+4)),
@@ -166,6 +135,14 @@ class gaussian_kde(object):
         self.neff = 1.0 / np.sum(self.weights ** 2)
 
         self.set_bandwidth(bw_method=bw_method)
+    
+    def from_dataframe(self, data, x, y, weights=None, bw_method=None):
+        x, y, weights = data[x], data[y], weights if weights is None else data[weights]
+        return self.from_arrays(x, y, weights, bw_method)
+    
+    def from_arrays(self, x, y, weights=None, bw_method=None):
+        xy = np.stack([x,y])
+        return GaussianKDE2D(xy, bw_method, weights)
 
     def evaluate(self, points):
         """Evaluate the estimated pdf on a set of points.
@@ -225,7 +202,7 @@ class gaussian_kde(object):
             The method used to calculate the estimator bandwidth.  This can be
             'scott', 'silverman', a scalar constant or a callable.  If a
             scalar, this will be used directly as `kde.factor`.  If a callable,
-            it should take a `gaussian_kde` instance as only parameter and
+            it should take a `GaussianKDE2D` instance as only parameter and
             return a scalar.  If None (default), nothing happens; the current
             `kde.covariance_factor` method is kept.
         Notes
@@ -234,7 +211,7 @@ class gaussian_kde(object):
         Examples
         --------
         >>> x1 = np.array([-7, -5, 1, 4, 5.])
-        >>> kde = stats.gaussian_kde(x1)
+        >>> kde = stats.GaussianKDE2D(x1)
         >>> xs = np.linspace(-10, 10, num=50)
         >>> y1 = kde(xs)
         >>> kde.set_bandwidth(bw_method='silverman')
@@ -290,49 +267,3 @@ class gaussian_kde(object):
         self.covariance = self._data_covariance * self.factor ** 2
         self.inv_cov = self._data_inv_cov / self.factor ** 2
         self._norm_factor = np.sqrt(np.linalg.det(2 * np.pi * self.covariance))  # * self.n
-
-if __name__ == '__main__':
-    # some random observations in 2D space
-    obs = np.reshape(np.random.standard_exponential(1000), (100, 10))[:, 0:2]
-    xy = np.transpose(obs)
-
-    weights = [0.9 if i > 3 else 0.1 for i in obs[:, 1]]
-
-    # kde space
-    xmin, xmax = (xy[0].min(), xy[0].max())
-    ymin, ymax = (xy[1].min(), xy[1].max())
-    x = np.linspace(xmin, xmax, 100)  # kde resolution
-    y = np.linspace(ymin, ymax, 100)  # kde resolution
-    xx, yy = np.meshgrid(x, y)
-
-    # Unweighted KDE
-    pdf = gaussian_kde(xy)
-    pdf.set_bandwidth(bw_method=pdf.factor / 5.)  # kde bandwidth
-    zz = pdf((np.ravel(xx), np.ravel(yy)))
-    zz1 = np.reshape(zz, xx.shape)
-
-    # weighted KDE
-    pdf = gaussian_kde(xy, weights=np.array(weights, np.float))
-    pdf.set_bandwidth(bw_method=pdf.factor / 5.)  # kde bandwidth
-    zz2 = pdf((np.ravel(xx), np.ravel(yy)))
-    zz2 = np.reshape(zz2, xx.shape)
-
-    # PLot
-    fig, axis = plt.subplots(2)
-    bounds = [xy[0].min(), xy[1].min(), xy[0].max(), xy[1].max()]
-
-    # plot unweighted
-    # axis[0].scatter(obs[:, 0], obs[:, 1])
-    axis[0].scatter(obs[:, 0], obs[:, 1])
-    cax = axis[0].imshow(np.rot90(zz1.T), cmap=plt.cm.Reds, extent=[bounds[0], bounds[2], bounds[1], bounds[3]])#, alpha=0.5)
-    axis[0].legend()
-
-    # plot weighted
-    axis[1].scatter(obs[:, 0], obs[:, 1])
-    cax = axis[1].imshow(np.rot90(zz2.T), cmap=plt.cm.Reds, extent=[bounds[0], bounds[2], bounds[1], bounds[3]])#, alpha=0.5)
-    axis[1].legend()
-
-    axis[0].set_title("unweighted")
-    axis[1].set_title("weighted")
-
-    plt.show()

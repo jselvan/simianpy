@@ -24,7 +24,6 @@ def get_error(grouped_data, error_method):
         elif error_method.lower() == 'iqr':
             median = grouped_data.median()
             error = pd.DataFrame({'lower':median-grouped_data.quantile(.25), 'upper':grouped_data.quantile(.75) - median})
-            # print(error, grouped_data.quantile([.25,.5,.75]))
         else:
             raise NotImplementedError()
     
@@ -63,7 +62,6 @@ class CatPlot:
         self.x_offset = 1/(self.nclusters+1) if x_offset is None else x_offset
 
         self.xtick_coords = np.arange(self.nbars) + (self.nclusters/2) * self.x_offset
-        # if self.nclusters % 2 == 0:
         self.xtick_coords -= (self.x_offset/2)
 
         if self.axes_var is None:
@@ -115,9 +113,6 @@ class CatPlot:
         else:
             label = cluster_name, stack_name
 
-        
-        # x_offset = offset*self.x_offset
-        # x = [self.xticklabels.index(x)+x_offset for x in y.index]
         x = np.arange(self.nbars) + offset*self.x_offset
         y = get_agg_data(data.groupby(self.agg), self.agg_method)
         yerr = get_error(data.groupby(self.agg), self.error_method)
@@ -127,10 +122,6 @@ class CatPlot:
         if yerr is not None:
             yerr = yerr.reindex(self.xticklabels).values.T
 
-        # if bottoms is None:
-        #     bottoms = np.zeros(len(x))
-        # else:
-        #     bottoms = [bottoms[self.xticklabels.index(x)] for x in y.index]
         self._plot(ax=ax,x=x,y=y,yerr=yerr,label=label,bottoms=bottoms,cluster_name=cluster_name,stack_name=stack_name)
         if self.swarm:
             self._swarmplot(ax=ax,data=data,x=x,label=label,bottoms=bottoms,cluster_name=cluster_name,stack_name=stack_name)

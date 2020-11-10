@@ -46,7 +46,10 @@ def Regression(x, y, data=None, drop_na=True, fitline=True, scatter=True, engine
         determines if a fitline is plotted
     scatter: bool; default=True
         determines if the original data is plotted
-    engine: str; default='holoviews
+    engine: str; default='matplotlib'
+    ax: Axes; default=None
+    fitline_kwargs: dict-like; default={}
+    scatter_kwargs: dict-like; default={}
     """
     regression_output = LinearRegression(x, y, data, drop_na)
     
