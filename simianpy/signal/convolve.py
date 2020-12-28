@@ -1,4 +1,7 @@
 from simianpy.plotting.util import get_ax
+import simianpy.misc
+
+import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -41,9 +44,21 @@ class Convolve():
     def __str__(self):
         return f"Convolve - window type: '{self.window.name}'; window size {self.size}."
 
-    def __init__(self, size=11, window='boxcar'):
+    def __init__(self, size=11, window='boxcar',use_gpu=True):
         self.size = int(size) #TODO: check first or always cast to int?
         self.window = window
+        self.xp, self.use_gpu = simianpy.misc.get_xp(use_gpu)
+        #TODO: implement being able to use the scipy versions instead?
+        if self.use_gpu:
+            try:
+                import cupyx.scipy.signal
+            except ImportError:
+                self.conv = scipy.signal.convolve
+            else:
+                self.conv = cupyx.scipy.signal.convolve
+        else:
+            self.conv = scipy.signal.convolve
+
     
     @property
     def window(self):
@@ -62,21 +77,37 @@ class Convolve():
             window = np.asarray(window)
             assert window.size == self.size, f"Provided window: {window} does not match provided size: {self.size}"
             self._window = pd.Series(window, index=x, name='custom')
+            return
         kernel /= kernel.sum()
         self._window = pd.Series(kernel, index=x, name=str(window))
     
-    @staticmethod
-    def _smooth_edge(edge_data):
-        return np.array([np.mean(edge_data[:(idx+1)]) for idx in range(edge_data.size)])
+    def _smooth_edge(self, edge_data):
+        return self.xp.array([self.xp.mean(edge_data[:(idx+1)]) for idx in range(edge_data.size)])
 
-    def __call__(self, data, pad=True):
-        if pad:
-            size_half = self.size//2
-            left = self._smooth_edge( data[:size_half] )
-            right = self._smooth_edge(data[:-(size_half+1 if self.size%2 else size_half):-1])[::-1]
-            return np.concatenate( [left, np.convolve(data, self.window, 'valid'), right] )
+    def __call__(self, data, axis=0, pad=False):
+        if self.use_gpu:
+            data = self.xp.array(data)
+            window = self.xp.array(self.window.values)
         else:
-            return np.convolve(data, self.window, 'same')
+            window = self.window.values
+        
+        if data.ndim == 1:
+            pass
+        elif data.ndim == 2:
+            window = self.xp.expand_dims(window, axis)
+
+        if pad:
+            warnings.warn('padding is no longer supported for simi.signal.convolve - argument will be removed in future versions')
+        # if pad:
+        #     if data.ndim==1:
+        #         size_half = self.size//2
+        #         left = self._smooth_edge( data[:size_half] )
+        #         right = self._smooth_edge(data[:-(size_half+1 if self.size%2 else size_half):-1])[::-1]
+        #         return self.xp.concatenate( [left, self.conv(data, window, 'valid'), right] )
+        #     else:
+        #         raise NotImplementedError('Padding with 2-dimensional inputs is not yet supported')
+        # else:
+        return self.conv(data, window, 'same')
     
     def plot_window(self, ax=None):
         ax = get_ax(ax)

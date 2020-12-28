@@ -3,6 +3,7 @@ import numpy as np
 import scipy.signal
 import pandas as pd
 
+#TODO: deprecate in next version...
 class Smooth():
     """Class to design smoothing functions
 

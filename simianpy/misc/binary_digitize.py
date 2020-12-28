@@ -42,7 +42,7 @@ def binary_digitize(data, threshold=None, errors=True):
     onsets, = np.where(off[:-1] & on[1:])
     offsets, = np.where(on[:-1] & off[1:])
 
-    if errors:
+    if onsets.size>0 and offsets.size>0 and errors:
         if onsets[0] > offsets[0]:
             offsets = offsets[1:]
         if onsets[-1] > offsets[-1]:

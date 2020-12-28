@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 from scipy.fftpack import fft, fftfreq
 
+#TODO: add cupy support
 class FFT:
     """Helper class for performing a FFT on time series data 
 

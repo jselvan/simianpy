@@ -2,6 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 # class from here: http://nbviewer.ipython.org/gist/tillahoffmann/f844bce2ec264c1c8cb5
+#TODO: implement cupy support
+#TODO: return data in original units?
 class GaussianKDE2D(object):
     """Representation of a kernel-density estimate using Gaussian kernels.
     Kernel density estimation is a way to estimate the probability density
@@ -119,7 +121,7 @@ class GaussianKDE2D(object):
     >>> ax.set_ylim([ymin, ymax])
     >>> plt.show()
     """
-    def __init__(self, dataset, bw_method=None, weights=None):
+    def __init__(self, dataset, bw_method=None, weights=None, norm=True):
         self.dataset = np.atleast_2d(dataset)
         if not self.dataset.size > 1:
             raise ValueError("`dataset` input should have multiple elements.")
@@ -130,19 +132,23 @@ class GaussianKDE2D(object):
         else:
             self.weights = np.ones(self.n) / self.n
 
+        self.norm = norm
+
         # Compute the effective sample size
         # http://surveyanalysis.org/wiki/Design_Effects_and_Effective_Sample_Size#Kish.27s_approximate_formula_for_computing_effective_sample_size
         self.neff = 1.0 / np.sum(self.weights ** 2)
 
         self.set_bandwidth(bw_method=bw_method)
     
-    def from_dataframe(self, data, x, y, weights=None, bw_method=None):
+    @classmethod
+    def from_dataframe(cls, data, x, y, weights=None, bw_method=None, norm=True):
         x, y, weights = data[x], data[y], weights if weights is None else data[weights]
-        return self.from_arrays(x, y, weights, bw_method)
+        return cls.from_arrays(x, y, weights, bw_method, norm)
     
-    def from_arrays(self, x, y, weights=None, bw_method=None):
+    @classmethod
+    def from_arrays(cls, x, y, weights=None, bw_method=None, norm=True):
         xy = np.stack([x,y])
-        return GaussianKDE2D(xy, bw_method, weights)
+        return GaussianKDE2D(xy, bw_method, weights, norm=norm)
 
     def evaluate(self, points):
         """Evaluate the estimated pdf on a set of points.
@@ -179,6 +185,8 @@ class GaussianKDE2D(object):
         # compute the pdf
         result = np.sum(np.exp(-.5 * chi2) * self.weights, axis=1) / self._norm_factor
 
+        if not self.norm:
+            result = result * self.weights.sum()
         return result
 
     __call__ = evaluate

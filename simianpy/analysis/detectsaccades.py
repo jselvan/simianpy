@@ -68,6 +68,8 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
 
     velocity.rename('velocity')
     saccade = velocity.abs() > velocity_threshold
+    if not saccade.any():
+        return pd.DataFrame()
     onset, offset = binary_digitize(saccade)
     onset, offset = saccade[onset].index, saccade[offset].index
 

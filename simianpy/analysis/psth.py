@@ -18,6 +18,8 @@ def bin_estimation(data, nbins_bounds=(4,50), range=None):
     ----------
     [1] Shimazaki, H., & Shinomoto, S. (2007). A method for selecting the bin size of a time histogram. Neural computation, 19(6), 1503-1527.
     """#TODO: complete docstring
+    if len(data) == 0:
+        return []
     nbins = np.arange(*nbins_bounds)
     if range is None:
         range = min(data), max(data)
@@ -71,7 +73,7 @@ class PSTH:
             nrows = len(data)
         bins = self._get_bins(data)
         timepoints = self._get_x(bins)
-        counts, _ = np.histogram(data, bins=bins)
+        counts, bins = np.histogram(data, bins=bins)
         if self.output_units == 'rate':
-            counts = counts / (np.diff(bins)/self.sampling_rate) / nrows
+            counts = counts / (1e3*np.diff(bins)/self.sampling_rate) / nrows
         return timepoints, counts

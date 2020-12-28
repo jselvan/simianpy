@@ -3,7 +3,7 @@ from simianpy.analysis.gaussian_kde_2d import GaussianKDE2D
 
 import numpy as np
 
-def GaussianKDE2DPlot(x, y, weights, data=None, range=None, xticks=None, yticks=None, resolution=100, bw_method=None, normalize=True, ax=None, im_kwargs=dict()):
+def GaussianKDE2DPlot(x, y, weights, data=None, range=None, xticks=None, yticks=None, resolution=100, bw_method=None, norm=True, ax=None, im_kwargs=dict()):
     if data is not None:
         x, y = data[x], data[y]
         if weights is not None:
@@ -20,15 +20,9 @@ def GaussianKDE2DPlot(x, y, weights, data=None, range=None, xticks=None, yticks=
     if yticks is None:
         yticks = np.linspace(y.min(), y.max(), resolution)
     
-    pdf = GaussianKDE2D.from_arrays(x, y,weights=weights,bw_method=bw_method)
+    pdf = GaussianKDE2D.from_arrays(x, y,weights=weights,bw_method=bw_method,norm=norm)
     xx, yy = np.meshgrid(xticks, yticks)
     zz = np.rot90(np.reshape(pdf((np.ravel(xx), np.ravel(yy))), xx.shape).T)
-
-    if normalize:
-        pass
-    else:
-        zz = zz * np.sum(weights) #TODO: figure out correct way to do this
-
     bounds = xticks.min(), xticks.max(), yticks.min(), yticks.max()
 
     ax = get_ax(ax)

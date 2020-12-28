@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal
-
+#TODO: add cupy support
 class Filter:
     """Class for designing digital frequency filters. 
     
