@@ -1,9 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
+import pandas as pd
 
 # class from here: http://nbviewer.ipython.org/gist/tillahoffmann/f844bce2ec264c1c8cb5
 #TODO: implement cupy support
-#TODO: return data in original units?
+#TODO: generalize to n-dimensional cases?
 class GaussianKDE2D(object):
     """Representation of a kernel-density estimate using Gaussian kernels.
     Kernel density estimation is a way to estimate the probability density
@@ -27,6 +28,12 @@ class GaussianKDE2D(object):
         An array of weights, of the same shape as `x`.  Each value in `x`
         only contributes its associated weight towards the bin count
         (instead of 1).
+    norm : bool, optional, default: True
+        pass
+    Constructors
+    ------------
+    GaussianKDE2D.from_dataframe(data, x, y, weights, bw_method, norm)
+
     Attributes
     ----------
     dataset : ndarray
@@ -51,8 +58,6 @@ class GaussianKDE2D(object):
         Evaluate the estimated pdf on a provided set of points.
     kde(points) : ndarray
         Same as kde.evaluate(points)
-    kde.pdf(points) : ndarray
-        Alias for ``kde.evaluate(points)``.
     kde.set_bandwidth(bw_method='scott') : None
         Computes the bandwidth, i.e. the coefficient that multiplies the data
         covariance matrix to obtain the kernel covariance matrix.
@@ -132,7 +137,10 @@ class GaussianKDE2D(object):
         else:
             self.weights = np.ones(self.n) / self.n
 
-        self.norm = norm
+        if norm:
+            self.norm = 1
+        else:
+            self.norm = weights.sum()
 
         # Compute the effective sample size
         # http://surveyanalysis.org/wiki/Design_Effects_and_Effective_Sample_Size#Kish.27s_approximate_formula_for_computing_effective_sample_size
@@ -142,7 +150,7 @@ class GaussianKDE2D(object):
     
     @classmethod
     def from_dataframe(cls, data, x, y, weights=None, bw_method=None, norm=True):
-        x, y, weights = data[x], data[y], weights if weights is None else data[weights]
+        x, y, weights = data[x].values, data[y].values, weights if weights is None else data[weights].values
         return cls.from_arrays(x, y, weights, bw_method, norm)
     
     @classmethod
@@ -150,7 +158,27 @@ class GaussianKDE2D(object):
         xy = np.stack([x,y])
         return GaussianKDE2D(xy, bw_method, weights, norm=norm)
 
-    def evaluate(self, points):
+    def evaluate(self, points=None, range=None, xticks=None, yticks=None, resolution=100, return_series=True, return_points=False):
+        if points is None:
+            x, y = self.dataset
+            if range is not None:
+                (xmin, xmax), (ymin, ymax) = range
+                xticks = np.linspace(xmin, xmax, resolution)
+                yticks = np.linspace(ymin, ymax, resolution)
+            if xticks is None:
+                xticks = np.linspace(x.min(), x.max(), resolution)
+            if yticks is None:
+                yticks = np.linspace(y.min(), y.max(), resolution)
+
+            xx, yy = np.meshgrid(xticks, yticks)
+            points = np.array([np.ravel(xx), np.ravel(yy)])
+        result = self._evaluate(points, return_series)
+        if return_points:
+            return result, points
+        else:
+            return result
+        
+    def _evaluate(self, points, return_series=False):
         """Evaluate the estimated pdf on a set of points.
         Parameters
         ----------
@@ -185,9 +213,12 @@ class GaussianKDE2D(object):
         # compute the pdf
         result = np.sum(np.exp(-.5 * chi2) * self.weights, axis=1) / self._norm_factor
 
-        if not self.norm:
-            result = result * self.weights.sum()
-        return result
+        result *= self.norm
+
+        if return_series:
+            return pd.Series(result, index=pd.MultiIndex.from_arrays(points, names=['x','y']), name='density')
+        else:
+            return result
 
     __call__ = evaluate
 

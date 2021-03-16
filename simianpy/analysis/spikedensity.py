@@ -20,6 +20,7 @@ class SDF:
         The sampling rate of desired spike density function in Hz
     convolve: str, callable or None, default=None
         If 'optimal', a globally optimal bandwidth is used to convolve a gaussian
+        NOTE: 'optimal'  has some weird behaviour, further testing required
         If callable, the provided object is called on the binarized data
         If None, `window` and\or `window_size` must be provided
     window, window_size: default=None
@@ -38,6 +39,40 @@ class SDF:
     use_gpu: bool, default=False
         Uses GPU acceleration when called. Requires cupy and CUDA support
         Currently only supported when `convolve` is 'optimal'
+    
+    Examples
+    --------
+    The easiest way to use this class:
+
+    initialize the class with desired properties. Here the spike density will be 
+    computed at 100Hz using a 1s wide gaussian window over a 60 minute range
+    >>> import simianpy as simi
+    >>> SDF=simi.analysis.SDF(100, window='gaussian', window_size=1e3, time_range=(0,60*60*1e3))
+    
+    Collect all your spikes in a nested list. Here each sublist has the spike times
+    for a single unit in milliseconds.
+    >>> units, spike_list = [], []
+    >>> for unit, spikes in spk.groupby('unitid'):
+    >>>     units.append(unit)
+    >>>     spike_list.append(spikes.values)
+
+    Using the compute_all method, compute the spike density function and store as
+    a pandas dataframe.
+    >>> sdf=SDF.compute_all(spike_list)
+    >>> sdf=pd.DataFrame(sdf, index=pd.Index(units,name='unitid'), columns=SDF.timestamps)
+
+    Methods
+    -------
+    SDF.parse_single_trial_binary(data)
+        Input data must be counts of spikes in bins corresponding to SDF.hist_bins
+    SDF.parse_single_trial_timestamps(data)
+        Computes bin counts and evaluates using SDF.parse_single_trial_binary
+    SDF.compute(data, on=None, variance=True, input='timestamps')
+        Computes mean and error terms for a spike density function across multiple trials
+        Loops through using the appropriate parse_single_trial_* function as specified by 'input'
+        Returns pd.DataFrame(index=SDF.timestamps,columns=['mean','variance','se'] if variance else ['mean'])
+    SDF.compute_all(data, input='timestamps')
+        
 
     References
     ----------
@@ -149,20 +184,6 @@ class SDF:
         y /= self.sampling_rate
         return y
 
-    # def _binarize(self, data):
-    #     binarized = self.xp.zeros_like(self.timestamps)
-    #     idx = ((data - self.timestamps.min()) * self.sampling_rate / 1000).astype(int)
-    #     above_bounds = (idx >= binarized.size)
-    #     if above_bounds.any():
-    #         warnings.warn('Some timestamps were not in range')
-    #         idx[above_bounds] = binarized.size-1
-    #     below_bounds = (idx < 0)
-    #     if below_bounds.any():
-    #         warnings.warn('Some timestamps were not in range')
-    #         idx[below_bounds] = 0
-    #     binarized[idx] = 1
-    #     return binarized
-
     def _binarize(self, data):
         binarized, _ = np.histogram(data, self.hist_bins)
         return binarized
@@ -193,7 +214,6 @@ class SDF:
     def compute(self, data, on=None, variance=True, input='timestamps'):
         if on is not None:
             data = map(operator.itemgetter(1), data.groupby(on))
-
         n = 0        
         x_sum = self.xp.zeros_like(self.timestamps)
         if variance:
@@ -210,15 +230,18 @@ class SDF:
             n += 1
 
         if self.use_gpu:
-            timestamps, x_sum, x_squared_sum = self.timestamps.get(), x_sum.get(), x_squared_sum.get()
+            timestamps, x_sum = self.timestamps.get(), x_sum.get()
+            if variance:
+                x_squared_sum = x_squared_sum.get()
         else:
             timestamps = self.timestamps
         sdf = pd.DataFrame(index=timestamps)
         sdf['mean'] = x_sum / n
         if variance:
-            sdf['variance'] = (x_squared_sum + (x_sum**2)/n)/n
-            sdf['se'] = sdf['variance']/n
+            sdf['variance'] = (x_squared_sum + (x_sum**2)/n)/n #TODO: check if variance formula is correct
+            sdf['se'] = (sdf['variance']/n)**.5
         return sdf
+
     def compute_all(self, data, input='timestamps'):
         if input=='timestamps':
             data = self.xp.array([self._binarize(trial) for trial in data])
