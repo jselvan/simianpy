@@ -1,3 +1,4 @@
+from simianpy.plotting.imshow import Image
 import pandas as pd 
 import numpy as np
 
@@ -16,7 +17,7 @@ def _heatmap_holoviews(heatmap_data, x, y, z):
     heatmap = hv.HeatMap(heatmap_data.reset_index(), [f'{x}_bin',f'{y}_bin'], z)
     return heatmap
 
-def HeatMap(x,y,z,data=None,bins=10,engine='holoviews'):
+def HeatMap(x,y,z,data=None,bins=10,engine='holoviews',ax=None,im_kwargs={},colorbar='vertical',method='mean'):
     """ A heatmap plotting utility for irregularly spaced data
     
     """#TODO: complete docstring
@@ -31,10 +32,16 @@ def HeatMap(x,y,z,data=None,bins=10,engine='holoviews'):
         else:
             nbins = len(bins)
         data.loc[:, f'{component}_bin'] = pd.cut(var, nbins, labels=bins)
-    heatmap_data = data.groupby([f'{x}_bin',f'{y}_bin'])[z].mean()
+    if method=='mean':
+        heatmap_data = data.groupby([f'{x}_bin',f'{y}_bin'])[z].mean()
+    else:
+        raise NotImplementedError('Only method=="mean" is currently supported')
     
     if engine == 'holoviews':
         heatmap = _heatmap_holoviews(heatmap_data, x, y, z)
+    elif engine == 'matplotlib':
+        #TODO: test
+        heatmap = Image(f'{x}_bin', f'{y}_bin', z, data=data, ax=ax, im_kwargs=im_kwargs, colorbar=colorbar)
     else:
         raise ValueError(f"Engine not implemented: {engine}. Choose one of: ['holoviews']")
 

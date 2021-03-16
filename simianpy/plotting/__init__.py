@@ -15,3 +15,6 @@ from .histogram import Histogram
 from .regression import Regression
 from .spike import plot_PSTH, Raster
 from .catplot import Bar, Line, CatPlot, ViolinPlot
+from .gaussian_kde_2d_plot import GaussianKDE2DPlot
+from .imshow import Image
+from .scatter import Scatter
