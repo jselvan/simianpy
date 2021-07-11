@@ -1,3 +1,5 @@
+from copy import copy 
+
 import matplotlib.pyplot as plt
 import numpy as np
 import scipy.signal
@@ -23,10 +25,8 @@ class Filter:
 
     Attributes
     ----------
-    nyquist_frequency: float; read only
-        returns nyquist frequency
-    freq_bounds_norm: float; read only
-        returns normalized frequency boundaries
+    sampling_rate
+    _filter
 
     Methods
     -------
@@ -41,34 +41,22 @@ class Filter:
         return f"Filter - Type: '{self.filter_type}'; Order: {self.filter_order}; Cutoff(s): {self.freq_bounds}; Fs: {self.sampling_frequency}"
 
     def __init__(self, filter_type, filter_order, freq_bounds, sampling_frequency, filter_fun = None, apply_fun = None):
-        if filter_fun is None:
-            self.filter_fun = scipy.signal.butter
-        else:
-            self.filter_fun = filter_fun
-        
         if apply_fun is None:
             self.apply_fun = scipy.signal.filtfilt
         else:
             self.apply_fun = apply_fun
 
-        self.filter_type = filter_type
-        self.filter_order = filter_order
-        self.sampling_frequency = sampling_frequency
-        self.freq_bounds = np.asarray(freq_bounds)
-    
-    @property
-    def _filter(self):
-        """Returns (b,a) corresponding to numerator and denominator polynomials respectively"""
-        return self.filter_fun(N = self.filter_order, Wn = self.freq_bounds_norm, btype = self.filter_type)
+        freq_bounds = np.asarray(freq_bounds)
+        freq_bounds_norm = freq_bounds/sampling_frequency/2
+        self.freq_bounds = freq_bounds
 
-    @property
-    def nyquist_frequency(self):
-        return self.sampling_frequency/2
-    
-    @property
-    def freq_bounds_norm(self):
-        return self.freq_bounds/self.nyquist_frequency
-    
+        if filter_fun is None:
+            filter_fun = scipy.signal.butter
+        self.filter_order = filter_order
+        self.filter_type = filter_type
+        self._filter = filter_fun(N = filter_order, Wn = freq_bounds_norm, btype = filter_type)
+        self.sampling_frequency = sampling_frequency
+
     def __call__(self, input_data):
         """Filter input data"""
         return self.apply_fun(*self._filter, input_data)

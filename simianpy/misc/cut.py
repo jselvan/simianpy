@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 
-def cut(series, bins, label_method='centers'):
+def cut(series, bins, label_method='center'):
     if label_method == 'center':
         bin_centers = np.mean([bins[1:],bins[:-1]],axis=0)
         return pd.cut(series, bins=bins, labels=bin_centers)

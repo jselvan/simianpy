@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 from scipy.fftpack import fft, fftfreq
+from scipy.signal import get_window
 
 #TODO: add cupy support
 class FFT:
@@ -27,9 +28,15 @@ class FFT:
     plot(ax=None,logx=False,logy=False)
         plots the FFT transform (only the real component)
     """
-    def __init__(self, data, sampling_rate):
+    def __init__(self, data, sampling_rate, window=None):
         self.data = data
         self.sampling_rate = sampling_rate
+        if window is None:
+            self.window = 1
+        elif isinstance(window, str):
+            self.window = get_window(window, self.length)
+        else:
+            self.window = window
     @property
     def nyquist(self):
         return self.sampling_rate / 2
@@ -38,10 +45,12 @@ class FFT:
         return len(self.data)
     @property
     def power(self):
-        return pd.Series(fft(self.data, self.length), index=self.freqs).sort_index()
+        power = fft(self.data*self.window, self.length)
+        real_power_scaled = 2/self.length*np.abs(power[:self.length//2])
+        return pd.Series(real_power_scaled, index=self.freqs).sort_index()
     @property
     def freqs(self):
-        return fftfreq(self.length, 1/self.sampling_rate)
+        return fftfreq(self.length, 1/self.sampling_rate)[:self.length//2]
     def plot(self, ax=None, logx=False, logy=False):
         ax = get_ax(ax)
         self.power.abs().plot(ax=ax)
@@ -51,9 +60,3 @@ class FFT:
         if logy:
             ax.set_yscale('log')
         return ax
-
-def FFTpower(data, sampling_rate, real=True):
-    power = FFT(data, sampling_rate).power
-    if real:
-        return power.loc[slice(0,None)]
-    return power
