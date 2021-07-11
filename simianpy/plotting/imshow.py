@@ -8,8 +8,8 @@ class Image:
 
         if data is None:
             data = pd.DataFrame({'x':x, 'y':y, 'z':z})
-            x, y, z = 'x', 'y', 'z'    
-        data = data.reset_index().set_index([y, x]).unstack()[z].sort_index(ascending=False)
+            x, y, z = 'x', 'y', 'z'
+        data = data.reset_index().set_index([y, x]).unstack(x)[z].sort_index(ascending=False)
         if fillna is not None:
             data.fillna(fillna)
         
@@ -23,6 +23,6 @@ class Image:
         else:
             self.cbar = None
         self.data = data
-        
+            
     #TODO: move the standard implementation to from_dataframe and make this
     #  implementation work from raw data?

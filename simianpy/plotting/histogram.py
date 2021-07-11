@@ -77,7 +77,27 @@ def Histogram(data, bins=10, range=None, density=False, proportion=False, multip
         return hist
     elif engine == 'matplotlib':
         ax = get_ax(ax)
-        ax.hist(data, bins=bins, range=range, density=density, weights=weights, **params)
+        if params.get('histtype') == 'line':
+            params.pop('histtype')
+            cumulative = params.pop('cumulative', False)
+            counts, edges = np.histogram(data, bins=bins, range=range, density=density, weights=weights)
+            if cumulative: counts = np.cumsum(counts)
+
+            align = params.pop('align', 'mid')
+            if align=='left':
+                bin_align_points = edges[:-1]
+            elif align=='right':
+                bin_align_points = edges[1:]
+            else:
+                bin_align_points = np.mean([edges[:-1], edges[1:]],axis=0)
+
+            orientation = params.pop('orientation', 'vertical')
+            if orientation=='vertical':
+                ax.plot(bin_align_points, counts, **params)
+            elif orientation=='horizontal':
+                ax.plot(counts, bin_align_points, **params)
+        else:
+            ax.hist(data, bins=bins, range=range, density=density, weights=weights, **params)
         return ax
     else:
         raise ValueError(f"Engine not implemented: {engine}. Choose one of: ['holoviews','matplotlib']")

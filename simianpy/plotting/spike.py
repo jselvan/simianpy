@@ -62,7 +62,7 @@ import matplotlib.pyplot as plt
 # def _matplotlib(ax):
 #     pass
 
-default_raster_eventplot_params = dict(color='k')
+default_raster_eventplot_params = dict(colors='k')
 default_PSTHplot_line_params = dict(color='r')
 default_PSTHplot_PSTH_params = dict(bins=50, sampling_rate=1e3)
 
@@ -74,7 +74,7 @@ def Raster(data, ax=None, eventplot_params={}, **kwargs):
 
 def plot_PSTH(data, ax=None, plot='line', plot_params={}, PSTH_params={}, **kwargs):
     ax = get_ax(ax)
-    xticks, counts = PSTH(**PSTH_params).compute(data)
+    xticks, counts = PSTH(**PSTH_params).compute(data,nrows=kwargs.get('nrows'))
     if plot == 'line':
         plot_params = ChainMap(plot_params, default_PSTHplot_line_params)
         ax.plot(xticks, counts, **plot_params)
