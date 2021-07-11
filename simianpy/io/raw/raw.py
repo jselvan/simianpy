@@ -3,7 +3,7 @@ from pathlib import Path
 
 import numpy as np
 
-def load_raw(filename, shape, dtype='int16', mmap=True):
+def load_raw(filename, shape, dtype='int16', mmap=True, mode='r'):
     filename = Path(filename)
     if not filename.is_file():
         raise FileNotFoundError(f"File not found: {filename}")
@@ -32,7 +32,7 @@ def load_raw(filename, shape, dtype='int16', mmap=True):
         raise ValueError(f"All dims must be integer values. shape={shape}")
 
     if mmap:
-        data = np.memmap(filename=filename,dtype=dtype,shape=shape,mode='r')
+        data = np.memmap(filename=filename,dtype=dtype,shape=shape,mode=mode)
     else:
         raise NotImplementedError(f"mmap=False not implemented")
         #TODO: implement load_raw without mmap 
