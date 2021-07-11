@@ -80,7 +80,8 @@ class SDF:
     """
     supported_output_units = 'rate',
 
-    def __init__(self, sampling_rate, convolve=None, window=None, window_size=None, output_units='rate', timestamps=None, time_range=None, use_gpu=False):
+    def __init__(self, sampling_rate, convolve=None, window=None, window_size=None, input_units='ms', output_units='rate', timestamps=None, time_range=None, use_gpu=False):
+        #TODO: self.scaling_factor = get_scale_factor(input_units, sampling_rate)
         self.xp, self.use_gpu = simianpy.misc.get_xp(use_gpu)
 
         self.sampling_rate = sampling_rate
@@ -99,7 +100,7 @@ class SDF:
             if window_size is None:
                 window_size = len(window)
             else:
-                window_size = window_size * (1e3/self.sampling_rate)
+                window_size = window_size * (self.sampling_rate/1e3)
             self.convolve = simianpy.signal.Convolve(size=window_size,window=window,use_gpu=self.use_gpu)
         else:
             raise TypeError("Missing required argument: Must provide convolve or window")

@@ -1,3 +1,5 @@
+from simianpy.misc.units import get_scale_factor
+
 import warnings
 import numpy as np
 
@@ -36,9 +38,9 @@ def bin_estimation(data, nbins_bounds=(4,50), range=None):
 
 class PSTH:
     supported_output_units = 'rate',
-    def __init__(self, sampling_rate=3e4, bins='optimal', range=None, output_units='rate', nbins_bounds=(4,50)):
+    def __init__(self, bins='optimal', range=None, input_units='ms', output_units='rate', sampling_rate=None, nbins_bounds=(4,50)):
         self._nbins_bounds = nbins_bounds #used for bin estimation
-        self.sampling_rate = sampling_rate
+        self.scaling_factor = get_scale_factor(input_units, sampling_rate)
 
         if output_units in self.supported_output_units:
             self.output_units = output_units
@@ -46,7 +48,7 @@ class PSTH:
             raise ValueError(f"Provided output units ({output_units}) is not one of supported options: {self.supported_output_units}")
         
         self.range = range
-        if bins == 'optimal':
+        if np.isscalar(bins) and bins == 'optimal':
             self._bins = 'optimal'
         elif np.isscalar(bins):
             if range is None:
@@ -59,21 +61,23 @@ class PSTH:
         return np.mean([bins[:-1], bins[1:]], axis=0)
     
     def _get_bins(self, data):
-        if self._bins == 'optimal':
+        if np.isscalar(self._bins) and self._bins == 'optimal':
             return bin_estimation(data, self._nbins_bounds, self.range)
         else:
             return self._bins
     
     def compute(self, data, nrows=None):
         if not all(np.isscalar(val) for val in data):
+            if nrows is None:
+                nrows = len(data)
             data = np.concatenate(data)
         else:
+            if nrows is None:
+                nrows = 1
             data = np.asarray(data)
-        if nrows is None:
-            nrows = len(data)
         bins = self._get_bins(data)
         timepoints = self._get_x(bins)
         counts, bins = np.histogram(data, bins=bins)
         if self.output_units == 'rate':
-            counts = counts / (1e3*np.diff(bins)/self.sampling_rate) / nrows
+            counts = counts / (np.diff(bins)/self.scaling_factor) / nrows
         return timepoints, counts

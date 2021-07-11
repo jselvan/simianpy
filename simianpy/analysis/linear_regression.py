@@ -26,7 +26,9 @@ class LinearRegression:
     x_label, y_label: str
         labels for x and y variables
     """
-    def __init__(self, x, y, data=None, drop_na=True):
+    def __repr__(self):
+        return f"x={self.x} & y={self.y}; y'={self.m}x+{self.b}; r={self.r}, p={self.p}"
+    def __init__(self, x, y, data=None, drop_na=True, x_pred=None):
         if data is None:
             self.data = pd.DataFrame({'x':x,'y':y})
             x, y = 'x', 'y'
@@ -42,5 +44,8 @@ class LinearRegression:
 
         self.m, self.b, self.r, self.p, self.e = scipy.stats.linregress(self.data[x], self.data[y])
         
-        self.x_pred = np.array([self.data[x].min(), self.data[x].max()])
+        if x_pred is None:
+            self.x_pred = np.array([self.data[x].min(), self.data[x].max()])
+        else:
+            self.x_pred = x_pred
         self.y_pred = self.m * self.x_pred + self.b

@@ -4,6 +4,76 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
+def get_trial_contdata(trial_info, contdata, tracelength=None, start='trialstart', 
+    end='trialend', pad=(None, None), cols=None, relative_timestamps=True, simple_index=False,
+    dropna=False):
+    """Get eye traces for each trial
+
+    Parameters
+    ----------
+    trial_info: pd.DataFrame
+        output of BehaviouralData.get_trial_info()
+    contdata: pd.DataFrame
+        continuous data to extract into trial structure
+    tracelength: pd.Timedelta or None, default: None
+        Determines length of eye traces
+        If not None, provided 'end' is ignored
+    start: str, default: 'trialstart'
+        A string that corresponds to a marker name used as the start of the slice
+    end: str, default: 'trialend'
+        A string that corresponds to a marker name used as the end of the slice
+        Ignored if tracelength is provided
+    pad: 2-tuple of pd.Timedelta or None, default: (None, None)
+        A 2-tuple corresponding to padding at start and end of slice
+    cols: list or None, default: None
+        List of columns to extract from self.contdata
+    relative_timestamps: boolean, default: True
+        if true, timestamps are subtracted by start value
+    dropna: boolean, default: False
+        if true, any trials with timestamps in start or end that are nan values will be dropped 
+    
+    Returns
+    -------
+    trial_contdata: pd.DataFrame
+    """
+    trial_info['slice_start'] = trial_info[start]
+    trial_info['slice_end'] = trial_info[end]
+
+    if dropna:
+        idx = trial_info.loc[:, ['slice_start', 'slice_end']].isna().any(axis=1)
+        trial_info = trial_info[~idx]
+    
+    if cols is None:
+        cols = slice(None)
+
+    def get_contdata(row):
+        start = row.slice_start
+        if pad[0] is not None:
+            start += pad[0]
+        end = row.slice_end if tracelength is None else row.slice_start+tracelength
+        if pad[1] is not None:
+            end += pad[1]
+        tslice = slice(start, end)
+
+        trace = contdata.loc[tslice, cols]
+        if relative_timestamps:
+            trace.index = trace.index - row.slice_start
+        
+        return trace
+
+    if simple_index:
+        trial_contdata = trial_info.apply(get_contdata,axis=1)
+        trial_contdata_df = pd.concat(trial_contdata.to_dict(), names=['trialid',*contdata.index.names])
+    else:
+        trial_contdata = {
+            (row.Index, row.condition, row.outcome): get_contdata(row)
+            for row in trial_info.itertuples()
+        }
+
+        names = ('trialid', 'condition', 'outcome', *contdata.index.names)
+        trial_contdata_df = pd.concat(trial_contdata, names=names)
+    return trial_contdata_df
+
 class BehaviouralData:
     """Utility class to analyze Behavioural Data
 
@@ -91,73 +161,10 @@ class BehaviouralData:
         trialinfo_df.index.name = 'trialid'
         return trialinfo_df
     
-    def get_trial_contdata(self, tracelength=None, start='trialstart', end='trialend', pad=(None, None), cols=None, relative_timestamps=True, dropna=False, trial_info=None):
-        """Get eye traces for each trial
-
-        Parameters
-        ----------
-        tracelength: pd.Timedelta or None, default: None
-            Determines length of eye traces
-            If not None, provided 'end' is ignored
-        start: str, default: 'trialstart'
-            A string that corresponds to a marker name used as the start of the slice
-        end: str, default: 'trialend'
-            A string that corresponds to a marker name used as the end of the slice
-            Ignored if tracelength is provided
-        pad: 2-tuple of pd.Timedelta or None, default: (None, None)
-            A 2-tuple corresponding to padding at start and end of slice
-        cols: list or None, default: None
-            List of columns to extract from self.contdata
-        relative_timestamps: boolean, default: True
-            if true, timestamps are subtracted by start value
-        dropna: boolean, default: False
-            if true, any trials with timestamps in start or end that are nan values will be dropped 
-        trial_info: pd.DataFrame, default: None
-            Used to override self-generated trial_info if necessary
-            if None, self.get_trial_info() is used
-        
-        Returns
-        -------
-        trial_eyedata: pd.DataFrame
-        """
+    def get_trial_contdata(self, **kwargs):
         if self.contdata is None:
-            raise ValueError(f"Must provide self.contdata if you want self.get_trial_contdata")
-        
-        if trial_info is None:
-            trial_info = self.get_trial_info()
-        trial_info['slice_start'] = trial_info[start]
-        trial_info['slice_end'] = trial_info[end]
-
-        if dropna:
-            idx = trial_info.loc[:, ['slice_start', 'slice_end']].isna().any(axis=1)
-            trial_info = trial_info[~idx]
-        
-        if cols is None:
-            cols = slice(None)
-
-        def get_contdata(row):
-            start = row.slice_start
-            if pad[0] is not None:
-                start += pad[0]
-            end = row.slice_end if tracelength is None else row.slice_start+tracelength
-            if pad[1] is not None:
-                end += pad[1]
-            tslice = slice(start, end)
-
-            trace = self.contdata.loc[tslice, cols]
-            if relative_timestamps:
-                trace.index = trace.index - row.slice_start
-            
-            return trace
-
-        trial_contdata = {
-            (row.Index, row.condition, row.outcome): get_contdata(row)
-            for row in trial_info.itertuples()
-        }
-
-        names = ('trialid', 'condition', 'outcome', *self.contdata.index.names)
-        trial_contdata_df = pd.concat(trial_contdata, names=names)
-        return trial_contdata_df
+            raise ValueError('self.contdata must be provided to use this function')
+        return get_trial_contdata(kwargs.get('trial_info', self.get_trial_info()), self.contdata)
 
 #TODO: implement getting spike_data from behaviouraldata? Or should I make a parent class for this, and subclass behavioural data separately from one that can do more?
 # def get_spikes_by_event(event_timestamps, spike_data, pad=(None,None)):

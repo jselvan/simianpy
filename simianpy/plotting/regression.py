@@ -41,7 +41,7 @@ def _regression_holoviews(regression_output, fitline, scatter):
 
     return hv.Overlay(plots) if plots else None
 
-def Regression(x, y, data=None, drop_na=True, fitline=True, scatter=True, engine='matplotlib', ax=None, fitline_kwargs={}, scatter_kwargs={}):
+def Regression(x, y, data=None, x_pred=None, drop_na=True, fitline=True, scatter=True, engine='matplotlib', ax=None, fitline_kwargs={}, scatter_kwargs={}):
     """ A convenience function for generating a regression plot
 
     Parameters
@@ -57,7 +57,7 @@ def Regression(x, y, data=None, drop_na=True, fitline=True, scatter=True, engine
     fitline_kwargs: dict-like; default={}
     scatter_kwargs: dict-like; default={}
     """
-    regression_output = LinearRegression(x, y, data, drop_na)
+    regression_output = LinearRegression(x, y, data, drop_na, x_pred=x_pred)
     
     if engine == 'holoviews':
         plot = _regression_holoviews(regression_output, fitline, scatter)

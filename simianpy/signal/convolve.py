@@ -68,7 +68,7 @@ class Convolve():
     def window(self, window):
         size_half = self.size//2
         x = np.arange(-size_half, size_half+1 if self.size%2 else size_half)
-        if window == 'gaussian':
+        if np.isscalar(window) and window == 'gaussian':
             kernel = np.exp( -( 2*x / size_half )**2 )
         elif isinstance(window, str):
             kernel = scipy.signal.get_window(window, self.size-1)

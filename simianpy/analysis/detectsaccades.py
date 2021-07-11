@@ -48,8 +48,6 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
     allowed_index_dtypes = pd.DatetimeIndex, pd.TimedeltaIndex
     if not isinstance(eyedata, pd.DataFrame):
         raise TypeError(f'eyedata must be pandas.DataFrame not {type(eyedata)}')
-    if not any(isinstance(eyedata.index, dtype) for dtype in allowed_index_dtypes):
-        raise TypeError(f'eyedata.index must be one of {allowed_index_dtypes} not {type(eyedata.index)}')
 
     if not all(col in eyedata.columns for col in ('eyeh', 'eyev')):
         raise ValueError("Eyedata must contain columns ['eyeh', 'eyev']")
@@ -103,10 +101,15 @@ def DetectSaccades(eyedata, method='radial', velocity_threshold=30, duration_thr
 
         saccade_data['amplitude'] = np.hypot(saccade_data['delta_x'], saccade_data['delta_y'])
         saccade_data['direction'] = np.arctan2(saccade_data['delta_y'], saccade_data['delta_x'])
-        saccade_data['duration'] = saccade_data['delta_t'].dt.total_seconds()*1e3
+        if hasattr(saccade_data['delta_t'], 'dt') and hasattr(saccade_data['delta_t'].dt, 'total_seconds'):
+            saccade_data['duration'] = saccade_data['delta_t'].dt.total_seconds()*1e3
+        else:
+            saccade_data['duration'] = saccade_data['delta_t']
 
         if hasattr(saccade_data['onset_t'], 'dt') and hasattr(saccade_data['onset_t'].dt, 'total_seconds'):
             saccade_data['latency'] = saccade_data['onset_t'].dt.total_seconds()*1e3
+        else:
+            saccade_data['latency'] = saccade_data['onset_t']
 
     saccade_data.reset_index(drop=True, inplace=True)
 
