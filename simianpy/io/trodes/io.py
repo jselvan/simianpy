@@ -1,5 +1,3 @@
-from memory_profiler import profile
-
 from simianpy.io.trodes.readtrodes import readTrodesExtractedDataFile
 from simianpy.io.File import File
 
@@ -95,8 +93,7 @@ class Trodes(File):
         _, dio = readTrodesExtractedDataFile(filepath, mmap_mode=mmap_mode)
         on, off = dio['time'][dio['state']==1], dio['time'][dio['state']==0]
         return on, off
-    
-    @profile
+
     def dump(self, dumpdir, chunksize=1e7): #should chunksize be an attribute?
         chunksize = int(chunksize)
         dumpdir = Path(dumpdir)
