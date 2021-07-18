@@ -73,8 +73,6 @@ class File():
         return recipe
     
     def __enter__(self):
-        if not hasattr(self, 'open'):
-            raise NotImplementedError('No open method exists for this class. Cannot use the context manager to interact.')
         self.open()
         return self
     

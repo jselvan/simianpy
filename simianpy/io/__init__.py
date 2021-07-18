@@ -21,3 +21,4 @@ from .intan import RHS
 from .openephys import OpenEphys
 from .convert import ephys2nex
 from .raw import load_raw
+from .trodes import Trodes

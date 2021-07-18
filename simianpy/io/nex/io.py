@@ -1,7 +1,6 @@
-from .nexfile import Reader, NexWriter
-from ..File import File
+from simianpy.io.nex.nexfile import Reader, NexWriter
+from simianpy.io.File import File
 
-from collections import defaultdict
 from pathlib import Path
 
 import numpy as np
