@@ -43,6 +43,7 @@ def CSD(depth, data, slices=None, sigma=-0.3):
     else:
         raise ValueError
 
-    data_ = sigma * ( (data[4:]-data[2:-2]+data[:-4]) / 4*(h**2) )
-    depth_ = depth[2:-2]
+    # data_ = sigma * (data[1:]-)
+    data_ = sigma * ( (data[2:]-2*data[1:-1]+data[:-2]) / 4*(h**2) )
+    depth_ = depth[1:-1]
     return depth_, data_
