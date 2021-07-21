@@ -21,5 +21,5 @@ def cmr(path,chunksize,copy):
         data -= np.median(data,axis=0,keepdims=True)
     else:
         for idx in tqdm(np.arange(0,data.shape[0],chunksize), desc='Applying median correction'):
-            chunkslice = slice(idx, idx+chunksize)
+            chunkslice = slice(int(idx), int(idx+chunksize))
             data[chunkslice,:] -= np.median(data[chunkslice,:],axis=1,keepdims=True).astype(int)

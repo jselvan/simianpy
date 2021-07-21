@@ -14,14 +14,14 @@ class Scatter:
         if all(ax in kwargs for ax in self.axes_names):
             self.ax_scatter, self.ax_histx, self.ax_histy = kwargs['ax_scatter'], kwargs['ax_histx'], kwargs['ax_histy']
         else:
-            self.ax_scatter, self.ax_histx, self.ax_histy = super.get_ax()
+            self.ax_scatter, self.ax_histx, self.ax_histy = self.get_axes()
         self.ax_scatter.tick_params(direction='in', top=True, right=True)
         self.ax_histx.tick_params(direction='in', labelbottom=False)
         self.ax_histy.tick_params(direction='in', labelleft=False)
         self.ax_scatter.scatter(x, y, label=kwargs.get('label'), **kwargs.get('scatter_kwargs', {}))
 
-        xbins = kwargs.get('xbins', np.arange(x.min(), x.max(), self.default_nbins))
-        ybins = kwargs.get('ybins', np.arange(y.min(), y.max(), self.default_nbins))
+        xbins = kwargs.get('xbins', np.linspace(x.min(), x.max(), self.default_nbins))
+        ybins = kwargs.get('ybins', np.linspace(y.min(), y.max(), self.default_nbins))
         self.ax_scatter.set_xlim(xbins.min(), xbins.max())
         self.ax_scatter.set_ylim(ybins.min(), ybins.max())
         self.ax_histx.hist(x, bins=xbins, **kwargs.get('hist_kwargs', {}))
