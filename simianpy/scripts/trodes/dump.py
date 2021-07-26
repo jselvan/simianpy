@@ -18,7 +18,8 @@ def infer_session_name(path):
 @click.option('-c','--chunksize',default=1e7,help='max number of samples loaded into memory at once. tweak to improve performance')
 @click.option('-r','--recipe-path',default=None,help='Recipe specifying how to map Trodes data')
 @click.option('-v','--verbose',default=False,is_flag=True)
-def dump(path, session_name, output, chunksize, recipe_path, verbose):
+@click.option('-e','--end',default=None,help='Truncate to this timestamp (in samples) if provided')
+def dump(path, session_name, output, chunksize, recipe_path, verbose, end):
     path = Path(path)
     session_name = infer_session_name(path) if session_name is None else session_name 
     if recipe_path is None:
@@ -34,4 +35,4 @@ def dump(path, session_name, output, chunksize, recipe_path, verbose):
         logger_kwargs=dict(printLevel=printLevel)
     )
     with Trodes(**kwargs) as trodes:
-        trodes.dump(output, chunksize)
+        trodes.dump(output, chunksize, end=end)

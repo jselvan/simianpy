@@ -94,7 +94,7 @@ class Trodes(File):
         on, off = dio['time'][dio['state']==1], dio['time'][dio['state']==0]
         return on, off
 
-    def dump(self, dumpdir, chunksize=1e7): #should chunksize be an attribute?
+    def dump(self, dumpdir, chunksize=1e7, end=None): #should chunksize be an attribute?
         chunksize = int(chunksize)
         dumpdir = Path(dumpdir)
         if not dumpdir.is_dir():
@@ -103,7 +103,7 @@ class Trodes(File):
             datatype = info['type']
             if datatype == 'analog':
                 self.logger.info(f'Dumping analog data: {name}')
-                timestamps = self._data[name]['timestamps']
+                timestamps = self._data[name]['timestamps'][slice(None, end)]
                 self.logger.info('Dumping timestamps file')
                 np.save(dumpdir/f"{name}.timestamps.npy", timestamps)
 
