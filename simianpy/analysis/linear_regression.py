@@ -27,7 +27,7 @@ class LinearRegression:
         labels for x and y variables
     """
     def __repr__(self):
-        return f"x={self.x} & y={self.y}; y'={self.m}x+{self.b}; r={self.r}, p={self.p}"
+        return f"x={self.x_label} & y={self.y_label}; y'={self.m}x+{self.b}; r={self.r}, p={self.p}"
     def __init__(self, x, y, data=None, drop_na=True, x_pred=None):
         if data is None:
             self.data = pd.DataFrame({'x':x,'y':y})
@@ -49,3 +49,5 @@ class LinearRegression:
         else:
             self.x_pred = x_pred
         self.y_pred = self.m * self.x_pred + self.b
+    def to_series(self):
+        return pd.Series({'m':self.m, 'b':self.b, 'r':self.r, 'p':self.p, 'e':self.e})

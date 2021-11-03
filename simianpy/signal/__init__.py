@@ -15,4 +15,3 @@ Modules
 from .filter import Filter
 from .fft import FFT
 from .convolve import Convolve
-from .smooth import Smooth
