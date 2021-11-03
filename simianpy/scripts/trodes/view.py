@@ -1,22 +1,20 @@
-from pathlib import Path
+from simianpy.plotting.scrolling_viewer import ScrollingViewerMultiChannel
 from simianpy.io.trodes import Trodes, infer_session_name
+
+from pathlib import Path
 
 import click
 
 @click.command()
 @click.argument('path')
 @click.option('-s','--session-name',default=None,help="provide session name if it can't be inferred")
-@click.option('-o','--output',default=None,help='output directory. defaults to PATH')
-@click.option('-c','--chunksize',default=1e7,help='max number of samples loaded into memory at once. tweak to improve performance')
 @click.option('-r','--recipe-path',default=None,help='Recipe specifying how to map Trodes data')
 @click.option('-v','--verbose',default=False,is_flag=True)
-@click.option('-e','--end',default=None,help='Truncate to this timestamp (in samples) if provided')
-def dump(path, session_name, output, chunksize, recipe_path, verbose, end):
+def view(path, session_name, recipe_path, verbose):
     path = Path(path)
     session_name = infer_session_name(path) if session_name is None else session_name 
     if recipe_path is None:
         raise ValueError('Must specify path to recipe')
-    output = path if output is None else Path(output)
     printLevel = 'DEBUG' if verbose else 'WARN'
 
     kwargs = dict(
@@ -27,4 +25,6 @@ def dump(path, session_name, output, chunksize, recipe_path, verbose, end):
         logger_kwargs=dict(printLevel=printLevel)
     )
     with Trodes(**kwargs) as trodes:
-        trodes.dump(output, chunksize, end=end)
+        data = list(trodes._data['raw']['data'].values())
+        ScrollingViewerMultiChannel(data, cmr=True).show()
+#  python -m simianpy.scripts trodes view D:\20210709_101444 -r C:\Users\selja\OneDrive\Research\Code\simianpy\test\recipe.yaml
