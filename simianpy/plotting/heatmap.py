@@ -34,14 +34,16 @@ def HeatMap(x,y,z,data=None,bins=10,engine='holoviews',ax=None,im_kwargs={},colo
         data.loc[:, f'{component}_bin'] = pd.cut(var, nbins, labels=bins)
     if method=='mean':
         heatmap_data = data.groupby([f'{x}_bin',f'{y}_bin'])[z].mean()
+    elif method=='sum':
+        heatmap_data = data.groupby([f'{x}_bin',f'{y}_bin'])[z].sum()
     else:
-        raise NotImplementedError('Only method=="mean" is currently supported')
+        raise NotImplementedError('Only "mean" and "sum" methods are currently supported')
     
     if engine == 'holoviews':
         heatmap = _heatmap_holoviews(heatmap_data, x, y, z)
     elif engine == 'matplotlib':
         #TODO: test
-        heatmap = Image(f'{x}_bin', f'{y}_bin', z, data=data, ax=ax, im_kwargs=im_kwargs, colorbar=colorbar)
+        heatmap = Image(f'{x}_bin', f'{y}_bin', z, data=heatmap_data, ax=ax, im_kwargs=im_kwargs, colorbar=colorbar)
     else:
         raise ValueError(f"Engine not implemented: {engine}. Choose one of: ['holoviews']")
 

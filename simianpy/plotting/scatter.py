@@ -1,3 +1,5 @@
+from simianpy.plotting import Histogram
+
 import matplotlib.pyplot as plt 
 import numpy as np
 
@@ -15,6 +17,8 @@ class Scatter:
             self.ax_scatter, self.ax_histx, self.ax_histy = kwargs['ax_scatter'], kwargs['ax_histx'], kwargs['ax_histy']
         else:
             self.ax_scatter, self.ax_histx, self.ax_histy = self.get_axes()
+        self.ax_scatter.sharex(self.ax_histx)
+        self.ax_scatter.sharey(self.ax_histy)
         self.ax_scatter.tick_params(direction='in', top=True, right=True)
         self.ax_histx.tick_params(direction='in', labelbottom=False)
         self.ax_histy.tick_params(direction='in', labelleft=False)
@@ -24,8 +28,14 @@ class Scatter:
         ybins = kwargs.get('ybins', np.linspace(y.min(), y.max(), self.default_nbins))
         self.ax_scatter.set_xlim(xbins.min(), xbins.max())
         self.ax_scatter.set_ylim(ybins.min(), ybins.max())
-        self.ax_histx.hist(x, bins=xbins, **kwargs.get('hist_kwargs', {}))
-        self.ax_histy.hist(y, bins=ybins, orientation='horizontal', **kwargs.get('hist_kwargs', {}))
+
+        hist_kwargs = kwargs.get('hist_kwargs', {})
+        hist_params = {k: hist_kwargs.pop(k) for k in ('density', 'proportion', 'multiplier', 'invert') if k in hist_kwargs}
+        hist_params['params'] = hist_kwargs.copy()
+        Histogram(x, bins=xbins, ax=self.ax_histx, **hist_params)
+        hist_kwargs['orientation'] = 'horizontal'
+        hist_params['params'] = hist_kwargs
+        Histogram(y, bins=ybins, ax=self.ax_histy, **hist_params)
     @classmethod
     def get_axes(cls):
         left, bottom, width, height = cls.default_rect_scatter
@@ -38,7 +48,7 @@ class Scatter:
         ax_scatter = plt.axes(rect_scatter)
         ax_histx = plt.axes(rect_histx)
         ax_histy = plt.axes(rect_histy)
-        return ax_scatter, ax_histx, ax_histy
+        return dict(ax_scatter=ax_scatter, ax_histx=ax_histx, ax_histy=ax_histy)
     @classmethod
     def from_dataframe(cls, x, y, data, hist='xy', **kwargs):
         x, y = data[x], data[y]
