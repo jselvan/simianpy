@@ -5,17 +5,17 @@ from matplotlib.widgets import Slider, CheckButtons
 class ScrollingViewer:
     offset = 400
     start = 0
-    view_size=int(6e4)
     bandpass_params = dict(order=3, highpass=300, lowpass=6000)
-    def __init__(self, data, cmr=False, bandpass=False):
+    def __init__(self, data, cmr=False, bandpass=False, view_size=int(6e4)):
         self.data = data
         self.nsamples, self.nchannels = self.data.shape
+        self.view_size = view_size
         self.samples = np.arange(0, self.nsamples).astype(int)
         self.cmr = cmr
         self.tslice = slice(self.start, self.start+self.view_size)
         self.bandpass = bandpass
     def get_data(self):
-        data = self.data[self.tslice, :]
+        data = self.data[self.tslice, :].copy()
         if self.cmr:
             data = data - np.median(data, axis=1, keepdims=True).astype(int)
         if self.bandpass:

@@ -3,10 +3,23 @@ from ..misc import binary_digitize
 import numpy as np
 
 def get_blink_mask(eyedata, pad=50, blink_threshold=None):
-    """ get a blink mask from eyedata
-    pad is in samples in both directions
+    """ Get a binary mask of blinks from eye data.
+
+    Parameters
+    ----------
+    eyedata : ndarray
+        Eye data.
+    pad : int
+        Number of samples to pad the beginning and end of blink events.
+    blink_threshold : float
+        Threshold for detecting blinks.
+        If None, the blink threshold is set eyedata.max()-1.
+    
+    Returns
+    -------
+    blink_mask : ndarray
+        Binary mask of blinks.
     """
-    #TODO: complete docstring
     if blink_threshold is None:
         blink_threshold = eyedata.max() - 1
     

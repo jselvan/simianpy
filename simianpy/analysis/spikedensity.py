@@ -251,7 +251,7 @@ class SDF:
         if self.convolve == 'optimal':
             sdf = [self.parse_single_trial_binary(trial) for trial in data]
         else:
-            sdf = self.convolve(data, axis=0, pad=False)
+            sdf = self.convolve(data, axis=0)
         if self.output_units == 'rate':
             sdf *= self.sampling_rate
         return sdf
