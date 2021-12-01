@@ -52,7 +52,7 @@ def merge(input_directories, output_directory, recipe_path, remove_offset):
                     shutil.copy(directory/f"{name}.channels.txt", output_directory)
 
                 ## load timestamps and adjust offset
-                timestamps = np.load(directory/f"{name}.timestamps.npy", 'r')
+                timestamps = np.load(directory/f"{name}.timestamps.npy")
                 if remove_offset: 
                     timestamps -= first_timestamp
                 timestamps += last_timestamp
@@ -60,7 +60,7 @@ def merge(input_directories, output_directory, recipe_path, remove_offset):
             elif info['type'] == 'DIO':
                 ## load on and off events and adjust offset
                 for state in ['on','off']:
-                    state_timestamps = np.load(directory/f"{name}.{state}.npy", 'r')
+                    state_timestamps = np.load(directory/f"{name}.{state}.npy")
                     if remove_offset:
                         state_timestamps -= first_timestamp
                     state_timestamps += last_timestamp
