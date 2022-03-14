@@ -30,7 +30,7 @@ class Filter:
 
     Methods
     -------
-    __call__(input_data,axis=1)
+    __call__(input_data,axis=-1)
         filter input data
     plot(ax=None,semilogx=False)
         plots the frequency response of filter
@@ -54,12 +54,17 @@ class Filter:
             filter_fun = scipy.signal.butter
         self.filter_order = filter_order
         self.filter_type = filter_type
-        self._filter = filter_fun(N = filter_order, Wn = freq_bounds_norm, btype = filter_type)
+        self._filter = filter_fun(
+            N = filter_order, 
+            Wn = freq_bounds, 
+            btype = filter_type,
+            fs = sampling_frequency
+        )
         self.sampling_frequency = sampling_frequency
 
-    def __call__(self, input_data):
+    def __call__(self, input_data, axis=-1):
         """Filter input data"""
-        return self.apply_fun(*self._filter, input_data)
+        return self.apply_fun(*self._filter, input_data, axis=axis)
 
     def check(self, input_data, ax = None):
         if ax is None:
