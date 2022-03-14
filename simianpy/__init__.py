@@ -24,7 +24,7 @@ There are various modules within simianpy to be used:
 Read the docs (I have not generated this yet!) or,
  use an interactive shell & docstrings to get more info
 """
-from . import io, misc, signal, analysis, plotting
+from . import analysis, io, misc, plotting, signal
 from ._version import version
 
 __version__ = version

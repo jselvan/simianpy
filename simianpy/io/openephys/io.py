@@ -1,14 +1,14 @@
-from .openephys import load
-from ..nex import Nex
-from ..File import File
-
-from collections import defaultdict
-from pathlib import Path
-import time
 import json
+import time
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+from ..File import File
+from ..nex import Nex
+from .openephys import load
+
 
 class OpenEphys(File):
     """Interface for OpenEphys files
@@ -49,69 +49,79 @@ class OpenEphys(File):
     spike_data
     event_data
     """
+
     description = """ """
-    extension = ['.continuous', '.spikes', '.events']
+    extension = [".continuous", ".spikes", ".events"]
     isdir = True
     needs_recipe = True
-    default_mode = 'r'
-    modes = ['r']
+    default_mode = "r"
+    modes = ["r"]
 
     def __init__(self, filename, **params):
         super().__init__(filename, **params)
-        self.start_time = params.get('start_time', 0)
+        self.start_time = params.get("start_time", 0)
 
     def open(self):
         self._get_data_cache()
-        if self.mode == 'r':
+        if self.mode == "r":
             for file_params in self.recipe:
-                filename = file_params['file']
-                filetype = file_params['type']
-                varname = file_params['name']
+                filename = file_params["file"]
+                filetype = file_params["type"]
+                varname = file_params["name"]
 
-                if not self.overwrite_cache and filetype in self._data.keys() and varname in self._data[filetype].keys():
+                if (
+                    not self.overwrite_cache
+                    and filetype in self._data.keys()
+                    and varname in self._data[filetype].keys()
+                ):
                     continue
                 if self.use_cache and filetype not in self._data.keys():
-                    #unlike the defaultdict interface, h5py interface does not 
-                    #tolerate missing labels unless we use h5py address syntax
+                    # unlike the defaultdict interface, h5py interface does not
+                    # tolerate missing labels unless we use h5py address syntax
                     self._data.create_group(filetype)
 
                 fpath = Path(self.filename, filename)
                 if not fpath.is_file():
-                    raise FileNotFoundError(f"File ({fpath.name}) not found at {fpath.parent}")
-                
-                #header must be serialized to allow interoperability with hdf caching
+                    raise FileNotFoundError(
+                        f"File ({fpath.name}) not found at {fpath.parent}"
+                    )
+
+                # header must be serialized to allow interoperability with hdf caching
                 data = load(fpath, self.logger)
-                header = data.pop('header')
+                header = data.pop("header")
                 self._data[filetype][varname] = data
-                self._data[filetype][varname]['header'] = json.dumps(header)
+                self._data[filetype][varname]["header"] = json.dumps(header)
 
     def close(self):
-        if self.mode == 'r':
+        if self.mode == "r":
             pass
-    
+
     def write(self, filename):
         raise NotImplementedError
 
     @staticmethod
     def read_timestamps(timestamps, start):
-        return pd.to_datetime(start, format = "%d-%b-%Y %H%M%S") + pd.to_timedelta(timestamps, unit = 's')
-
-    def _parse_continuous_data(self, cnt_data):
-        header = json.loads(cnt_data['header'])
-        block_length = int(header['blockLength'])
-        sampling_rate = int(header['sampleRate'])
-        start_time = header['date_created']
-        expanded_timestamps = ( np.expand_dims(cnt_data['timestamps'], axis = 1) \
-            + np.expand_dims(np.arange(block_length)/sampling_rate, axis = 0) ).flatten()
-        return pd.Series(
-            cnt_data['data'],
-            index = self.read_timestamps(
-                timestamps=expanded_timestamps, 
-                start=start_time
-            )
+        return pd.to_datetime(start, format="%d-%b-%Y %H%M%S") + pd.to_timedelta(
+            timestamps, unit="s"
         )
 
-    def get_continuous_data(self, keys = None, resample_freq = None):
+    def _parse_continuous_data(self, cnt_data):
+        header = json.loads(cnt_data["header"])
+        block_length = int(header["blockLength"])
+        sampling_rate = int(header["sampleRate"])
+        start_time = header["date_created"]
+        expanded_timestamps = (
+            np.expand_dims(cnt_data["timestamps"], axis=1)
+            + np.expand_dims(np.arange(block_length) / sampling_rate, axis=0)
+        ).flatten()
+        return pd.Series(
+            cnt_data["data"],
+            index=self.read_timestamps(
+                timestamps=expanded_timestamps, start=start_time
+            ),
+        )
+
+    def get_continuous_data(self, keys=None, resample_freq=None):
         """Get continuous data from openephys data as pandas dataframe
 
         Parameters
@@ -130,68 +140,78 @@ class OpenEphys(File):
             index will be a pd.DateTimeIndex using timestamps from openephys
         """
         if keys is None:
-            keys = self._data['continuous'].keys()
+            keys = self._data["continuous"].keys()
         continuous_data = pd.DataFrame(
-            {key: self._parse_continuous_data(self._data['continuous'][key]) for key in keys}
+            {
+                key: self._parse_continuous_data(self._data["continuous"][key])
+                for key in keys
+            }
         )
         if resample_freq is not None:
             continuous_data = continuous_data.asfreq(resample_freq)
         return continuous_data
-    
+
     def _parse_spike_data(self, spk_data):
-        header = json.loads(spk_data['header'])
+        header = json.loads(spk_data["header"])
         sample_in_microseconds = f"{1e6/float(header['sampleRate']):.3f}U"
-        start_time = header['date_created']
+        start_time = header["date_created"]
         return pd.DataFrame(
-            spk_data['spikes'].squeeze(),
-            columns = pd.timedelta_range(0, periods = spk_data['spikes'].shape[1], freq = sample_in_microseconds),
-            index = pd.MultiIndex.from_arrays(
+            spk_data["spikes"].squeeze(),
+            columns=pd.timedelta_range(
+                0, periods=spk_data["spikes"].shape[1], freq=sample_in_microseconds
+            ),
+            index=pd.MultiIndex.from_arrays(
                 [
-                    spk_data['sortedId'].squeeze(),
-                    self.read_timestamps(spk_data['timestamps'].squeeze(), start = start_time)
+                    spk_data["sortedId"].squeeze(),
+                    self.read_timestamps(
+                        spk_data["timestamps"].squeeze(), start=start_time
+                    ),
                 ],
-                names = ('Unit', 'Timestamp')
-            )
+                names=("Unit", "Timestamp"),
+            ),
         )
 
-    def get_spike_data(self, keys = None):
+    def get_spike_data(self, keys=None):
         if keys is None:
-            keys = self._data['spikes'].keys()
+            keys = self._data["spikes"].keys()
         spike_data = pd.concat(
-            {key: self._parse_spike_data(self._data['spikes'][key]) for key in keys}
+            {key: self._parse_spike_data(self._data["spikes"][key]) for key in keys}
         )
         return spike_data
-    
+
     def _parse_event_data(self, evt_data):
-        header = json.loads(evt_data['header'])
-        start_time = header['date_created']
-        vars = ['timestamps', 'eventId', 'channel']
-        evt_data_df = pd.DataFrame( {var: evt_data[var].squeeze() for var in vars} )
-        evt_data_df['bitVal'] = 2**(7-evt_data_df['channel'])
-        event_data = evt_data_df.query('eventId==1').groupby('timestamps').bitVal.sum()
-        event_data.index = self.read_timestamps( timestamps=event_data.index , start=start_time )
+        header = json.loads(evt_data["header"])
+        start_time = header["date_created"]
+        vars = ["timestamps", "eventId", "channel"]
+        evt_data_df = pd.DataFrame({var: evt_data[var].squeeze() for var in vars})
+        evt_data_df["bitVal"] = 2 ** (7 - evt_data_df["channel"])
+        event_data = evt_data_df.query("eventId==1").groupby("timestamps").bitVal.sum()
+        event_data.index = self.read_timestamps(
+            timestamps=event_data.index, start=start_time
+        )
         return event_data
 
-    def get_event_data(self, keys = None):
+    def get_event_data(self, keys=None):
         if keys is None:
-            keys = self._data['events'].keys()
+            keys = self._data["events"].keys()
         event_data = pd.DataFrame(
-            {key: self._parse_event_data(self._data['events'][key]) for key in keys}
+            {key: self._parse_event_data(self._data["events"][key]) for key in keys}
         )
         return event_data
 
     def to_nex(self, nexfile_path, timestampFrequency, **params):
-        #TODO implement to_nex function
+        # TODO implement to_nex function
         nexfile_path = Path(nexfile_path)
-        
+
         start_time = time.time()
-        with Nex(nexfile_path, mode='w', timestampFrequency=timestampFrequency, **params) as nexfile:
+        with Nex(
+            nexfile_path, mode="w", timestampFrequency=timestampFrequency, **params
+        ) as nexfile:
             pass
 
-        self.logger.info(f'\nSuccessfully wrote nexfile at path: {nexfile_path}')
-        self.logger.info(f'Total time: {(time.time() - start_time):.3f} seconds\n\n')
+        self.logger.info(f"\nSuccessfully wrote nexfile at path: {nexfile_path}")
+        self.logger.info(f"Total time: {(time.time() - start_time):.3f} seconds\n\n")
         return nexfile
-
 
     # unit_as_char = lambda x: chr(x - 1 + ord('a')) if x > 0 else 'U'
     # writer = nexfile.NexWriter(SamplingRate_spikes, useNumpy=True)
@@ -223,22 +243,22 @@ class OpenEphys(File):
     #         except:
     #             warnings.warn(f'Failed to shape WaveformValues appropriately. Skipping unit: {wave_name}')
     #             continue
-            
+
     #         if WaveformValues.shape[1] != NPointsWave:
     #             warnings.warn(f'Waveforms for unit {wave_name} has {WaveformValues.shape[1]} points instead of {NPointsWave} points as specified by arg NPointsWave. NPointsWave will be adjusted for this unit - there may be unintended consequences.')
 
     #         #add neuron & spike waveforms
     #         writer.AddNeuron(name = neuron_name, timestamps = neuronTs)
-    #         writer.AddWave(name = wave_name, 
-    #         timestamps = neuronTs, 
-    #         SamplingRate = SamplingRate_spikes, 
-    #         WaveformValues = WaveformValues, 
+    #         writer.AddWave(name = wave_name,
+    #         timestamps = neuronTs,
+    #         SamplingRate = SamplingRate_spikes,
+    #         WaveformValues = WaveformValues,
     #         NPointsWave=NPointsWave,
     #         PrethresholdTimeInSeconds=PrethresholdTimeInSeconds,
     #         wire = channel,
     #         unit = unit_num
     #         )
-        
+
     #     #add continuous data
     #     continuous_fpath = os.path.join(ephys_path, f"{LFP_prefix}{i + 1}.continuous")
     #     continuous_data = load(continuous_fpath)
@@ -251,20 +271,20 @@ class OpenEphys(File):
     #     SamplingRate = SamplingRate_continuous,
     #     values = scipy.signal.decimate(continuous_data['data'], 30)
     #     )
-    
+
     # #add eye channels
     # print("\nFor eye channel:")
     # for eye_channel, fname in eye_channels.items():
     #     continuous_fpath = os.path.join(ephys_path, fname)
     #     continuous_data = load(continuous_fpath)
-        
+
     #     #decimates by factor 30, using Chebyshev type I infinite impulse response filter of order 8 (in theory this is the same as MATLAB decimate)
     #     writer.AddContVarWithSingleFragment(name = eye_channel,
     #     timestampOfFirstDataPoint = continuous_data['timestamps'][0],
     #     SamplingRate = SamplingRate_continuous,
     #     values = scipy.signal.decimate(continuous_data['data'], 30)
     #     )
-    
+
     # #add event codes
     # print('\nFor events:')
     # event_fpath = os.path.join(ephys_path, 'all_channels.events')
@@ -281,6 +301,6 @@ class OpenEphys(File):
     #             markers.append(marker_val)
     #             timestamps.append(timestamp)
     #         marker_val = 0
-    
+
     # writer.AddMarker(name = 'Strobed', timestamps = np.array(timestamps), fieldNames = np.array(['DIO']), markerFields = np.array([[f'{int(marker):03d}' for marker in markers]]))
     # writer.WriteNexFile(nexfile_path)

@@ -3,7 +3,10 @@
 # Michael Gibson 23 April 2015
 
 
-import sys, struct, os
+import os
+import struct
+import sys
+
 
 def read_qstring(fid):
     """Read Qt style QString.  
@@ -14,27 +17,29 @@ def read_qstring(fid):
     Strings are stored as unicode.
     """
 
-    length, = struct.unpack('<I', fid.read(4))
-    if length == int('ffffffff', 16): return ""
+    (length,) = struct.unpack("<I", fid.read(4))
+    if length == int("ffffffff", 16):
+        return ""
 
-    if length > (os.fstat(fid.fileno()).st_size - fid.tell() + 1) :
-        raise Exception(f'Length = {length}. Too long.')
+    if length > (os.fstat(fid.fileno()).st_size - fid.tell() + 1):
+        raise Exception(f"Length = {length}. Too long.")
 
     # convert length from bytes to 16-bit Unicode words
     length = int(length / 2)
 
     data = []
     for _ in range(0, length):
-        c, = struct.unpack('<H', fid.read(2))
+        (c,) = struct.unpack("<H", fid.read(2))
         data.append(c)
 
-    if sys.version_info >= (3,0):
-        a = ''.join([chr(c) for c in data])
+    if sys.version_info >= (3, 0):
+        a = "".join([chr(c) for c in data])
     else:
-        a = ''.join([unichr(c) for c in data])
+        a = "".join([unichr(c) for c in data])
 
     return a
-  
-if __name__ == '__main__':
-    a=read_qstring(open(sys.argv[1], 'rb'))
+
+
+if __name__ == "__main__":
+    a = read_qstring(open(sys.argv[1], "rb"))
     print(a)

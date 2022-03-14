@@ -1,5 +1,6 @@
 import numpy as np
 
+
 def binary_digitize(data, threshold=None, errors=True):
     """ Infer on and off states from a continuous signal and determine transition points
 
@@ -39,16 +40,16 @@ def binary_digitize(data, threshold=None, errors=True):
     else:
         off = data <= threshold
         on = data > threshold
-    onsets, = np.where(off[:-1] & on[1:])
-    offsets, = np.where(on[:-1] & off[1:])
+    (onsets,) = np.where(off[:-1] & on[1:])
+    (offsets,) = np.where(on[:-1] & off[1:])
 
     if errors:
-        if onsets.size>0 and offsets.size>0:
+        if onsets.size > 0 and offsets.size > 0:
             if onsets[0] > offsets[0]:
                 offsets = offsets[1:]
             if onsets[-1] > offsets[-1]:
                 onsets = onsets[:-1]
-        elif onsets.size==0 or offsets.size==0:
+        elif onsets.size == 0 or offsets.size == 0:
             return np.array([]), np.array([])
 
         if onsets.size != offsets.size:
@@ -56,6 +57,6 @@ def binary_digitize(data, threshold=None, errors=True):
                 f"Number of onsets {onsets.size} and offsets {offsets.size} \
                 must be the same or differ by 1 due to edge cases"
             )
-    
-    onsets, offsets = onsets+1, offsets+1 # corrects for off-by-one error
+
+    onsets, offsets = onsets + 1, offsets + 1  # corrects for off-by-one error
     return onsets, offsets

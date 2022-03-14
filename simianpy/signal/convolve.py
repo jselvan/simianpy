@@ -1,12 +1,13 @@
-from simianpy.plotting.util import get_ax
-import simianpy.misc
-
 import warnings
 
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import scipy.signal
+
+import simianpy.misc
+from simianpy.plotting.util import get_ax
+
 
 class Convolve():
     """Class to design a function for a linear convolution

@@ -16,9 +16,9 @@ Modules
     intan -- io for intan file formats ('.rhs')
     convert -- functions for converting between file formats
 """
-from .nex import Nex
-from .intan import RHS
-from .openephys import OpenEphys
 from .convert import ephys2nex
+from .intan import RHS
+from .nex import Nex
+from .openephys import OpenEphys
 from .raw import load_raw
 from .trodes import Trodes

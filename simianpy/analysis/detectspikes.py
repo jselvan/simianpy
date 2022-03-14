@@ -1,9 +1,7 @@
-from simianpy.signal import Filter
-
-import numpy as np
 import scipy.signal
 
-def DetectSpikes(data, threshold = -20, negative = True):
+
+def DetectSpikes(data, threshold=-20, negative=True):
     """Detect spikes in a vector
 
     Parameters
@@ -29,5 +27,7 @@ def DetectSpikes(data, threshold = -20, negative = True):
     ax.plot(lfp_raw)
     ax.plot(spk.index, lfp_raw.loc[spk.index], 'x')
     """
-    #TODO implement spike detection
-    scipy.signal.find_peaks( -data if negative else data, height = -threshold if negative else threshold)
+    # TODO implement spike detection
+    scipy.signal.find_peaks(
+        -data if negative else data, height=-threshold if negative else threshold
+    )

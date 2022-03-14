@@ -1,12 +1,13 @@
 import warnings
+
 import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import scipy.stats
 
+
 # class from here: http://nbviewer.ipython.org/gist/tillahoffmann/f844bce2ec264c1c8cb5
-#TODO: implement cupy support
-#TODO: generalize to n-dimensional cases?
+# TODO: implement cupy support
+# TODO: generalize to n-dimensional cases?
 class GaussianKDE2D(object):
     """Representation of a kernel-density estimate using Gaussian kernels.
     Kernel density estimation is a way to estimate the probability density
@@ -128,16 +129,17 @@ class GaussianKDE2D(object):
     >>> ax.set_ylim([ymin, ymax])
     >>> plt.show()
     """
+
     def __init__(self, dataset, bw_method=None, weights=None, norm=True):
         self.dataset = np.atleast_2d(dataset)
         self.weights = weights
         if not self.dataset.size > 1:
             raise ValueError("`dataset` input should have multiple elements.")
         if np.isnan(self.dataset).any():
-            warnings.warn('dataset contains NaN or inf values. Converting to 0')
+            warnings.warn("dataset contains NaN or inf values. Converting to 0")
             self.dataset = np.nan_to_num(self.dataset)
         if np.isnan(self.weights).any():
-            warnings.warn('weights contains NaN or inf values. Converting to 0')
+            warnings.warn("weights contains NaN or inf values. Converting to 0")
             self.weights = np.nan_to_num(self.weights)
         self.kernel = scipy.stats.gaussian_kde(self.dataset, bw_method, self.weights)
         # self.d, self.n = self.dataset.shape
@@ -157,18 +159,31 @@ class GaussianKDE2D(object):
         # self.neff = 1.0 / np.sum(self.weights ** 2)
 
         # self.set_bandwidth(bw_method=bw_method)
-    
+
     @classmethod
     def from_dataframe(cls, data, x, y, weights=None, bw_method=None, norm=True):
-        x, y, weights = data[x].values, data[y].values, weights if weights is None else data[weights].values
+        x, y, weights = (
+            data[x].values,
+            data[y].values,
+            weights if weights is None else data[weights].values,
+        )
         return cls.from_arrays(x, y, weights, bw_method, norm)
-    
+
     @classmethod
     def from_arrays(cls, x, y, weights=None, bw_method=None, norm=True):
-        xy = np.stack([x,y])
+        xy = np.stack([x, y])
         return GaussianKDE2D(xy, bw_method, weights, norm=norm)
 
-    def evaluate(self, points=None, range=None, xticks=None, yticks=None, resolution=100, return_series=True, return_points=False):
+    def evaluate(
+        self,
+        points=None,
+        range=None,
+        xticks=None,
+        yticks=None,
+        resolution=100,
+        return_series=True,
+        return_points=False,
+    ):
         if points is None:
             x, y = self.dataset
             if range is not None:
@@ -183,7 +198,11 @@ class GaussianKDE2D(object):
             xx, yy = np.meshgrid(xticks, yticks)
             points = np.array([np.ravel(xx), np.ravel(yy)])
         result = self.kernel(points)
-        result = pd.Series(result, index=pd.MultiIndex.from_arrays(points, names=['x','y']), name='density')
+        result = pd.Series(
+            result,
+            index=pd.MultiIndex.from_arrays(points, names=["x", "y"]),
+            name="density",
+        )
         if return_points:
             return result, points
         else:

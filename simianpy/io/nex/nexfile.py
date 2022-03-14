@@ -30,12 +30,12 @@ If your files are larger than a few MB, use numpy version of the NexWriter:
     writer.WriteNexFile('C:\\Data\\pythonWithFloatContValues.nex5', 1)
 """
 
-import sys
-import os
-import struct
 import array
 import json
 import numbers
+import os
+import struct
+import sys
 
 try:
     import numpy as np

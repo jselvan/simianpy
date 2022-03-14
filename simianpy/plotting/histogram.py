@@ -1,27 +1,39 @@
-from simianpy.plotting.util import get_ax
-
+import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.pyplot as plt 
+
+from simianpy.plotting.util import get_ax
 
 try:
     import holoviews as hv
 except ImportError:
     hv = None
 else:
-    from holoviews import opts, dim
+    from holoviews import dim, opts
 
-default_params = {
-    'matplotlib': {},
-    'holoviews': {}
-}
+default_params = {"matplotlib": {}, "holoviews": {}}
+
 
 def _histogram_holoviews(edges, frequencies):
     if hv is None:
-        raise ImportError("holoviews module could not be imported. use a different engine")
+        raise ImportError(
+            "holoviews module could not be imported. use a different engine"
+        )
     hist = hv.Histogram((edges, frequencies))
     return hist
 
-def Histogram(data, bins=10, range=None, density=False, proportion=False, multiplier=1, invert=False, engine='matplotlib', ax=None, params={}):
+
+def Histogram(
+    data,
+    bins=10,
+    range=None,
+    density=False,
+    proportion=False,
+    multiplier=1,
+    invert=False,
+    engine="matplotlib",
+    ax=None,
+    params={},
+):
     """ A convenience function for generating histograms
 
     Parameters
@@ -61,13 +73,19 @@ def Histogram(data, bins=10, range=None, density=False, proportion=False, multip
     if proportion and density:
         raise ValueError("proportion and density cannot both be enabled")
 
-    weights = np.ones_like(data)*proportion/data.size if proportion else np.ones_like(data)
+    weights = (
+        np.ones_like(data) * proportion / data.size
+        if proportion
+        else np.ones_like(data)
+    )
     if invert:
         weights *= -1
     weights = weights * multiplier
-    frequencies, edges = np.histogram(data, bins, range, density=density, weights=weights)
+    frequencies, edges = np.histogram(
+        data, bins, range, density=density, weights=weights
+    )
 
-    if engine == 'holoviews':
+    if engine == "holoviews":
         if invert:
             frequencies *= -1
         frequencies = frequencies * multiplier
@@ -75,29 +93,36 @@ def Histogram(data, bins=10, range=None, density=False, proportion=False, multip
             raise NotImplementedError
         hist = _histogram_holoviews(edges, frequencies)
         return hist
-    elif engine == 'matplotlib':
+    elif engine == "matplotlib":
         ax = get_ax(ax)
-        if params.get('histtype') == 'line':
-            params.pop('histtype')
-            cumulative = params.pop('cumulative', False)
-            counts, edges = np.histogram(data, bins=bins, range=range, density=density, weights=weights)
-            if cumulative: counts = np.cumsum(counts)
+        if params.get("histtype") == "line":
+            params.pop("histtype")
+            cumulative = params.pop("cumulative", False)
+            counts, edges = np.histogram(
+                data, bins=bins, range=range, density=density, weights=weights
+            )
+            if cumulative:
+                counts = np.cumsum(counts)
 
-            align = params.pop('align', 'mid')
-            if align=='left':
+            align = params.pop("align", "mid")
+            if align == "left":
                 bin_align_points = edges[:-1]
-            elif align=='right':
+            elif align == "right":
                 bin_align_points = edges[1:]
             else:
-                bin_align_points = np.mean([edges[:-1], edges[1:]],axis=0)
+                bin_align_points = np.mean([edges[:-1], edges[1:]], axis=0)
 
-            orientation = params.pop('orientation', 'vertical')
-            if orientation=='vertical':
+            orientation = params.pop("orientation", "vertical")
+            if orientation == "vertical":
                 ax.plot(bin_align_points, counts, **params)
-            elif orientation=='horizontal':
+            elif orientation == "horizontal":
                 ax.plot(counts, bin_align_points, **params)
         else:
-            ax.hist(data, bins=bins, range=range, density=density, weights=weights, **params)
+            ax.hist(
+                data, bins=bins, range=range, density=density, weights=weights, **params
+            )
         return ax
     else:
-        raise ValueError(f"Engine not implemented: {engine}. Choose one of: ['holoviews','matplotlib']")
+        raise ValueError(
+            f"Engine not implemented: {engine}. Choose one of: ['holoviews','matplotlib']"
+        )

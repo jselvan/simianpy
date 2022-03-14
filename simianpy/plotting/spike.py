@@ -35,13 +35,13 @@ ax1.axis('off')
 fig.tight_layout()
 fig.savefig('fig_.png')
 """
-from simianpy.plotting.util import get_ax, ax_formatting
-from simianpy.analysis import PSTH
-
 from collections import ChainMap
 
+import matplotlib.pyplot as plt
 import numpy as np
-import matplotlib.pyplot as plt 
+
+from simianpy.analysis import PSTH
+from simianpy.plotting.util import ax_formatting, get_ax
 
 # try:
 #     import holoviews as hv
@@ -62,23 +62,26 @@ import matplotlib.pyplot as plt
 # def _matplotlib(ax):
 #     pass
 
-default_raster_eventplot_params = dict(colors='k')
-default_PSTHplot_line_params = dict(color='r')
+default_raster_eventplot_params = dict(colors="k")
+default_PSTHplot_line_params = dict(color="r")
 default_PSTHplot_PSTH_params = dict(bins=50, sampling_rate=1e3)
+
 
 def Raster(data, ax=None, eventplot_params={}, **kwargs):
     ax = get_ax(ax)
     eventplot_params = ChainMap(eventplot_params, default_raster_eventplot_params)
-    ax.eventplot(data,**eventplot_params)
+    ax.eventplot(data, **eventplot_params)
     return ax
 
-def plot_PSTH(data, ax=None, plot='line', plot_params={}, PSTH_params={}, **kwargs):
+
+def plot_PSTH(data, ax=None, plot="line", plot_params={}, PSTH_params={}, **kwargs):
     ax = get_ax(ax)
-    xticks, counts = PSTH(**PSTH_params).compute(data,nrows=kwargs.get('nrows'))
-    if plot == 'line':
+    xticks, counts = PSTH(**PSTH_params).compute(data, nrows=kwargs.get("nrows"))
+    if plot == "line":
         plot_params = ChainMap(plot_params, default_PSTHplot_line_params)
         ax.plot(xticks, counts, **plot_params)
     return ax
 
-def plot_SDF(data, ax=None, plot='line', plot_params={}, SDF_params={}, **kwargs):
+
+def plot_SDF(data, ax=None, plot="line", plot_params={}, SDF_params={}, **kwargs):
     raise NotImplementedError

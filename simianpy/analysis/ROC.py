@@ -1,5 +1,7 @@
 import concurrent.futures
+
 import numpy as np
+
 
 def ROC(A, B, nsteps=100):
     """ Vectorized implementation of computing ROC curve from spike times.
@@ -15,13 +17,18 @@ def ROC(A, B, nsteps=100):
     -------
     pA, pB : ndarray (n_observations, n_steps)
     """
-    criteria = np.linspace(np.min([A.min(axis=0),B.min(axis=0)],axis=0), np.max([A.max(axis=0),B.max(axis=0)],axis=0), nsteps).T
-    criteria = np.expand_dims(criteria,0)
+    criteria = np.linspace(
+        np.min([A.min(axis=0), B.min(axis=0)], axis=0),
+        np.max([A.max(axis=0), B.max(axis=0)], axis=0),
+        nsteps,
+    ).T
+    criteria = np.expand_dims(criteria, 0)
     A.sort(axis=0)
     B.sort(axis=0)
-    pA = (np.expand_dims(A,-1)>=criteria).sum(axis=0)/A.shape[0]
-    pB = (np.expand_dims(B,-1)>=criteria).sum(axis=0)/B.shape[0]
+    pA = (np.expand_dims(A, -1) >= criteria).sum(axis=0) / A.shape[0]
+    pB = (np.expand_dims(B, -1) >= criteria).sum(axis=0) / B.shape[0]
     return pA, pB
+
 
 def AUROC(A, B, nsteps=100):
     """ Vectorized implementation of computing AUROC from spike times.
@@ -41,6 +48,7 @@ def AUROC(A, B, nsteps=100):
     area = -np.trapz(pB, pA)
     return area
 
+
 def AUROC_obs(obs, labels, nsteps=100):
     """ Vectorized implementation of computing AUROC from spike times and a list of labels.
 
@@ -57,7 +65,8 @@ def AUROC_obs(obs, labels, nsteps=100):
     -------
     AUROC : ndarray (n_observations,)
     """
-    return AUROC(obs[labels=='A'], obs[labels=='B'], nsteps)
+    return AUROC(obs[labels == "A"], obs[labels == "B"], nsteps)
+
 
 def bootstrap_AUROC(obs, labels, nsteps=100, n_iterations=1000):
     """ Vectorized, multi-threaded implementation of bootstrapping AUROC from spike times and a list of labels.
@@ -79,6 +88,11 @@ def bootstrap_AUROC(obs, labels, nsteps=100, n_iterations=1000):
     """
     actual_auroc = AUROC_obs(obs, labels, nsteps)
     with concurrent.futures.ThreadPoolExecutor() as executor:
-        null_auroc = list(executor.map(lambda _: AUROC_obs(obs, np.random.permutation(labels), nsteps), range(n_iterations)))
+        null_auroc = list(
+            executor.map(
+                lambda _: AUROC_obs(obs, np.random.permutation(labels), nsteps),
+                range(n_iterations),
+            )
+        )
     null_auroc = np.array(null_auroc)
     return actual_auroc, null_auroc

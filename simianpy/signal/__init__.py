@@ -12,6 +12,6 @@ Modules
     fft
     smooth
 """
-from .filter import Filter
-from .fft import FFT
 from .convolve import Convolve
+from .fft import FFT
+from .filter import Filter
