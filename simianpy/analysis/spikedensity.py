@@ -1,17 +1,100 @@
-import warnings
-import simianpy.signal
-import simianpy.misc
-
 import operator
 
 import numpy as np
 import pandas as pd
 import scipy.interpolate
 
-#TODO: Implement optimal window width using: https://github.com/cooperlab/AdaptiveKDE/tree/master/adaptivekde
-#TODO: support cupy use even when not using globally optimal bandwidth
-#TODO: add shinomoto refs to docstring
-class SDF:
+import simianpy.misc
+import simianpy.signal
+
+
+class GlobalOptimizationMixin:
+    """A mixin that determines convolution window widths using a global optimization algorithm.
+
+    References
+    ----------
+    [1] https://github.com/cooperlab/AdaptiveKDE/tree/master/adaptivekde
+    """
+    def _logexp(self, x):
+        if x < 1e2:
+            return self.xp.log(1 + self.xp.exp(x))
+        else:
+            return x
+
+    def _ilogexp(self, x):
+        if x < 1e2:
+            return self.xp.log(self.xp.exp(x) - 1)
+        else:
+            return x
+
+    def _global_optimization_cost_function(self, y_hist, N, w, dt):
+        yh = self._fftkernel(y_hist, w / dt)
+        C = (
+            self.xp.sum(yh ** 2) * dt
+            - 2 * self.xp.sum(yh * y_hist) * dt
+            + 2 / (2 * self.xp.pi) ** 0.5 / w / N
+        )
+        C = C * N ** 2
+        return C, yh
+
+    def _fftkernel(self, x, w):
+        L = x.size
+        Lmax = L + 3 * w
+        n = int(2 ** self.xp.ceil(self.xp.log2(Lmax)))
+        X = self.xp.fft.fft(x, n)
+        f = self.xp.linspace(0, n - 1, n) / n
+        f = self.xp.concatenate(
+            (-f[0 : self.xp.int(n / 2 + 1)], f[1 : self.xp.int(n / 2 - 1 + 1)][::-1])
+        )
+        K = self.xp.exp(-0.5 * (w * 2 * self.xp.pi * f) ** 2)
+        y = self.xp.real(self.xp.fft.ifft(X * K, n))
+        y = y[0:L]
+        return y
+
+    def _globally_optimized_bandwidth(self, data):
+        dt = 1 / self.sampling_rate
+        N = data.sum()
+        y_hist = data / N / dt
+
+        k = 0
+
+        Wmin = 2 * dt
+        Wmax = self.xp.max(data) - self.xp.min(data)
+        tol = 10e-5
+        phi = (5 ** 0.5 + 1) / 2
+        a = self._ilogexp(Wmin)
+        b = self._ilogexp(Wmax)
+        c1 = (phi - 1) * a + (2 - phi) * b
+        c2 = (2 - phi) * a + (phi - 1) * b
+        f1, _ = self._global_optimization_cost_function(y_hist, N, self._logexp(c1), dt)
+        f2, _ = self._global_optimization_cost_function(y_hist, N, self._logexp(c2), dt)
+        while (self.xp.abs(b - a) > tol * (self.xp.abs(c1) + self.xp.abs(c2))) & (
+            k < 20
+        ):
+            if f1 < f2:
+                b = c2
+                c2 = c1
+                c1 = (phi - 1) * a + (2 - phi) * b
+                f2 = f1
+                f1, yh1 = self._global_optimization_cost_function(
+                    y_hist, N, self._logexp(c1), dt
+                )
+                y = yh1 / self.xp.sum(yh1 * dt)
+            else:
+                a = c1
+                c1 = c2
+                c2 = (2 - phi) * a + (phi - 1) * b
+                f1 = f2
+                f2, yh2 = self._global_optimization_cost_function(
+                    y_hist, N, self._logexp(c2), dt
+                )
+                y = yh2 / self.xp.sum(yh2 * dt)
+            k += 1
+        y /= self.sampling_rate
+        return y
+
+
+class SDF(GlobalOptimizationMixin):
     """ A helper class for computing spike density functions
 
     Parameters
@@ -38,7 +121,7 @@ class SDF:
         self.timestamps is then defined as: arange(*time_range, 1e3/sampling_rate)
     use_gpu: bool, default=False
         Uses GPU acceleration when called. Requires cupy and CUDA support
-        Currently only supported when `convolve` is 'optimal'
+        Performance gains may be minimal - test before using
     
     Examples
     --------
@@ -72,16 +155,29 @@ class SDF:
         Loops through using the appropriate parse_single_trial_* function as specified by 'input'
         Returns pd.DataFrame(index=SDF.timestamps,columns=['mean','variance','se'] if variance else ['mean'])
     SDF.compute_all(data, input='timestamps')
+        Computes individual spike density functions across multiple trials/units
         
 
     References
     ----------
     [1] http://www.psy.vanderbilt.edu/faculty/schall/scientific-tools/
     """
-    supported_output_units = 'rate',
 
-    def __init__(self, sampling_rate, convolve=None, window=None, window_size=None, input_units='ms', output_units='rate', timestamps=None, time_range=None, use_gpu=False):
-        #TODO: self.scaling_factor = get_scale_factor(input_units, sampling_rate)
+    supported_output_units = ("rate",)
+
+    def __init__(
+        self,
+        sampling_rate,
+        convolve=None,
+        window=None,
+        window_size=None,
+        input_units="ms",
+        output_units="rate",
+        timestamps=None,
+        time_range=None,
+        use_gpu=False,
+    ):
+        # TODO: self.scaling_factor = get_scale_factor(input_units, sampling_rate)
         self.xp, self.use_gpu = simianpy.misc.get_xp(use_gpu)
 
         self.sampling_rate = sampling_rate
@@ -89,118 +185,65 @@ class SDF:
         if convolve is not None:
             self.convolve = convolve
         elif window is not None:
-            if window == 'psp':
-                growth, decay = 1, 20 # in ms
-                length = 4*decay # should be close to 0 at this point
-                window = np.array([(1-np.exp(-(i+1)/growth))*np.exp(-(i+1)/decay) for i in range(length)])
+            if window == "psp":
+                growth, decay = 1, 20  # in ms
+                length = 4 * decay  # should be close to 0 at this point
+                window = np.array(
+                    [
+                        (1 - np.exp(-(i + 1) / growth)) * np.exp(-(i + 1) / decay)
+                        for i in range(length)
+                    ]
+                )
                 if sampling_rate != 1e3:
-                    window = scipy.interpolate.interp1d(np.arange(0,length),window)(np.arange(0,length-1,1e3/sampling_rate)) #upsample to the sampling rate
-                window = np.concatenate((np.zeros(window.size-1),window))
+                    window = scipy.interpolate.interp1d(np.arange(0, length), window)(
+                        np.arange(0, length - 1, 1e3 / sampling_rate)
+                    )  # upsample to the sampling rate
+                window = np.concatenate((np.zeros(window.size - 1), window))
                 window /= window.sum()
             if window_size is None:
                 window_size = len(window)
             else:
-                window_size = window_size * (self.sampling_rate/1e3)
-            self.convolve = simianpy.signal.Convolve(size=window_size,window=window,use_gpu=self.use_gpu)
+                window_size = window_size * (self.sampling_rate / 1e3)
+            self.convolve = simianpy.signal.Convolve(
+                size=window_size, window=window, use_gpu=self.use_gpu
+            )
         else:
-            raise TypeError("Missing required argument: Must provide convolve or window")
-        
+            raise TypeError(
+                "Missing required argument: Must provide convolve or window"
+            )
+
         if output_units in self.supported_output_units:
             self.output_units = output_units
         else:
-            raise ValueError(f"Provided output units ({output_units}) is not one of supported options: {self.supported_output_units}")
+            raise ValueError(
+                f"Provided output units ({output_units}) is not one of supported options: {self.supported_output_units}"
+            )
 
         if timestamps is not None:
             self.timestamps = timestamps
         elif time_range is not None:
-            self.timestamps = self.xp.arange(*time_range, 1e3/sampling_rate)
-        half_dt = 1e3/2/self.sampling_rate
-        self.hist_bins = (self.timestamps - half_dt).tolist() + [self.timestamps[-1]+half_dt]
-    
-    # Global optimization functions from: https://github.com/cooperlab/AdaptiveKDE/tree/master/adaptivekde
-    def _logexp(self, x):
-        if x<1e2:
-            return self.xp.log(1+self.xp.exp(x))
-        else:
-            return x
-    
-    def _ilogexp(self, x):
-        if x<1e2:
-            return self.xp.log(self.xp.exp(x)-1)
-        else:
-            return x
-    
-    def _global_optimization_cost_function(self, y_hist,N,w,dt):
-        yh = self._fftkernel(y_hist, w / dt)
-        C = self.xp.sum(yh**2) * dt - 2 * self.xp.sum(yh * y_hist) * dt + 2 / (2 * self.xp.pi)**0.5 / w / N
-        C = C * N**2
-        return C, yh
-    
-    def _fftkernel(self, x, w):
-        L = x.size
-        Lmax = L + 3 * w
-        n = int(2 ** self.xp.ceil(self.xp.log2(Lmax)))
-        X = self.xp.fft.fft(x, n)
-        f = self.xp.linspace(0, n-1, n) / n
-        f = self.xp.concatenate((-f[0: self.xp.int(n / 2 + 1)],
-                            f[1: self.xp.int(n / 2 - 1 + 1)][::-1]))
-        K = self.xp.exp(-0.5 * (w * 2 * self.xp.pi * f) ** 2)
-        y = self.xp.real(self.xp.fft.ifft(X * K, n))
-        y = y[0:L]
-        return y
-
-    def _globally_optimized_bandwidth(self, data):
-        dt = 1/self.sampling_rate
-        N = data.sum()
-        y_hist = data / N / dt
-        
-        k = 0
-
-        Wmin = 2*dt
-        Wmax = (self.xp.max(data) - self.xp.min(data))
-        tol = 10e-5
-        phi = (5**0.5 + 1) / 2
-        a = self._ilogexp(Wmin)
-        b = self._ilogexp(Wmax)
-        c1 = (phi - 1) * a + (2 - phi) * b
-        c2 = (2 - phi) * a + (phi - 1) * b
-        f1, _ = self._global_optimization_cost_function(y_hist, N, self._logexp(c1), dt)
-        f2, _ = self._global_optimization_cost_function(y_hist, N, self._logexp(c2), dt)
-        while (self.xp.abs(b-a) > tol * (self.xp.abs(c1) + self.xp.abs(c2))) & (k < 20):
-            if f1 < f2:
-                b = c2
-                c2 = c1
-                c1 = (phi - 1) * a + (2 - phi) * b
-                f2 = f1
-                f1, yh1 = self._global_optimization_cost_function(y_hist, N, self._logexp(c1), dt)
-                y = yh1 / self.xp.sum(yh1 * dt)
-            else:
-                a = c1
-                c1 = c2
-                c2 = (2 - phi) * a + (phi - 1) * b
-                f1 = f2
-                f2, yh2 = self._global_optimization_cost_function(y_hist, N, self._logexp(c2), dt)
-                y = yh2 / self.xp.sum(yh2 * dt)
-            k += 1
-        y /= self.sampling_rate
-        return y
+            self.timestamps = self.xp.arange(*time_range, 1e3 / sampling_rate)
+        half_dt = 1e3 / 2 / self.sampling_rate
+        self.hist_bins = (self.timestamps - half_dt).tolist() + [
+            self.timestamps[-1] + half_dt
+        ]
 
     def _binarize(self, data):
         binarized, _ = np.histogram(data, self.hist_bins)
         return binarized
-    
+
     def parse_single_trial_binary(self, data):
         if self.use_gpu:
             data = self.xp.array(data)
         if data.any():
-            if self.convolve == 'optimal':
+            if self.convolve == "optimal":
                 sdf = self._globally_optimized_bandwidth(data)
             else:
                 sdf = self.convolve(data)
         else:
             sdf = self.xp.zeros_like(data)
-        
-        if self.output_units == 'rate':
+
+        if self.output_units == "rate":
             sdf *= self.sampling_rate
 
         return sdf
@@ -212,22 +255,22 @@ class SDF:
         sdf = self.parse_single_trial_binary(data)
         return sdf
 
-    def compute(self, data, on=None, variance=True, input='timestamps'):
+    def compute(self, data, on=None, variance=True, input="timestamps"):
         if on is not None:
             data = map(operator.itemgetter(1), data.groupby(on))
-        n = 0        
+        n = 0
         x_sum = self.xp.zeros_like(self.timestamps)
         if variance:
             x_squared_sum = self.xp.zeros_like(self.timestamps)
 
         for trial in data:
-            if input=='timestamps':
+            if input == "timestamps":
                 sdf = self.parse_single_trial_timestamps(trial)
-            elif input=='binary':
+            elif input == "binary":
                 sdf = self.parse_single_trial_binary(trial)
             x_sum += sdf
             if variance:
-                x_squared_sum += (sdf**2)
+                x_squared_sum += sdf ** 2
             n += 1
 
         if self.use_gpu:
@@ -237,21 +280,21 @@ class SDF:
         else:
             timestamps = self.timestamps
         sdf = pd.DataFrame(index=timestamps)
-        sdf['mean'] = x_sum / n
+        sdf["mean"] = x_sum / n
         if variance:
-            sdf['variance'] = (x_squared_sum + (x_sum**2)/n)/n #TODO: check if variance formula is correct
-            sdf['se'] = (sdf['variance']/n)**.5
+            sdf["variance"] = (x_squared_sum / n) - (x_sum / n) ** 2
+            sdf["se"] = (sdf["variance"] / n) ** 0.5
         return sdf
 
-    def compute_all(self, data, input='timestamps'):
-        if input=='timestamps':
+    def compute_all(self, data, input="timestamps"):
+        if input == "timestamps":
             data = self.xp.array([self._binarize(trial) for trial in data])
-        elif input=='binary':
+        elif input == "binary":
             data = self.xp.array(data)
-        if self.convolve == 'optimal':
+        if self.convolve == "optimal":
             sdf = [self.parse_single_trial_binary(trial) for trial in data]
         else:
             sdf = self.convolve(data, axis=0)
-        if self.output_units == 'rate':
+        if self.output_units == "rate":
             sdf *= self.sampling_rate
         return sdf
