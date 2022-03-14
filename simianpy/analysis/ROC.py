@@ -35,7 +35,7 @@ def AUROC(A, B, nsteps=100):
 
     Returns
     -------
-    AUROC : ndarray (n_samples,)
+    AUROC : ndarray (n_observations,)
     """
     pA, pB = ROC(A, B, nsteps)
     area = -np.trapz(pB, pA)
@@ -48,14 +48,14 @@ def AUROC_obs(obs, labels, nsteps=100):
     ----------
     obs : ndarray (n_observations, n_samples)
         Spike times
-    labels : ndarray (n_samples, )
+    labels : ndarray (n_observations, )
         Label of each observation
     nsteps : int, default=100
         Number of steps to compute probabilities for ROC curve
 
     Returns
     -------
-    AUROC : ndarray (n_samples,)
+    AUROC : ndarray (n_observations,)
     """
     return AUROC(obs[labels=='A'], obs[labels=='B'], nsteps)
 
@@ -66,7 +66,7 @@ def bootstrap_AUROC(obs, labels, nsteps=100, n_iterations=1000):
     ----------
     obs : ndarray (n_observations, n_samples)
         Spike times
-    labels : ndarray (n_samples, )
+    labels : ndarray (n_observations, )
         Label of each observation
     nsteps : int, default=100
         Number of steps to compute probabilities for ROC curve
@@ -75,7 +75,7 @@ def bootstrap_AUROC(obs, labels, nsteps=100, n_iterations=1000):
 
     Returns
     -------
-    actual_auroc, null_auroc: ndarray(n_samples), ndarray (n_samples, n_iterations)
+    actual_auroc, null_auroc: ndarray(n_observations), ndarray (n_observations, n_iterations)
     """
     actual_auroc = AUROC_obs(obs, labels, nsteps)
     with concurrent.futures.ThreadPoolExecutor() as executor:
