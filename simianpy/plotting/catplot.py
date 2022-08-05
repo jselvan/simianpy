@@ -216,12 +216,15 @@ class CatPlot:
         for (_, group_data), xcoord in zip(data.groupby(self.agg), x):
             y = group_data.values
             y.sort()
-            xmin, xmax = xcoord - (0.5 * self.x_offset), xcoord + (0.5 * self.x_offset)
-            counts, edges = np.histogram(y, **self.swarm_hist_params)
-            x_ = np.concatenate(
-                [np.linspace(xmin, xmax, count + 2)[1:-1] for count in counts]
-            )
-            bin_centers = np.mean([edges[1:], edges[:-1]], axis=0)
+            if self.swarm_hist_params == 'off':
+                x_ = xcoord * np.ones_like(y)
+            else:
+                xmin, xmax = xcoord - (0.5 * self.x_offset), xcoord + (0.5 * self.x_offset)
+                counts, edges = np.histogram(y, **self.swarm_hist_params)
+                x_ = np.concatenate(
+                    [np.linspace(xmin, xmax, count + 2)[1:-1] for count in counts]
+                )
+                # bin_centers = np.mean([edges[1:], edges[:-1]], axis=0)
             ax.scatter(
                 x_,
                 y,
