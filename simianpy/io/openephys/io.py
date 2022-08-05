@@ -18,12 +18,12 @@ class OpenEphys(File):
     This class is still under development!
 
     Handling of event data is currently hard coded into this class.
-    Recommended use case is to subclass or monkey patch 
+    Recommended use case is to subclass or monkey patch
 
     Parameters
     ----------
-    filename: str or Path 
-    mode: str, optional, default: 'r' 
+    filename: str or Path
+    mode: str, optional, default: 'r'
         Must be one of ['r']
     recipe: str, Path or list
         recipe describing what files to load
@@ -35,14 +35,14 @@ class OpenEphys(File):
     cache_path: Path, file-like object or None, optional, default: None
         If a cache_path is provided, the HDF file will be saved.
         Any valid input to h5py.File is accepted
-        If None, a temporary file (tempfile.TemporaryFile) will be 
+        If None, a temporary file (tempfile.TemporaryFile) will be
         used. This file will be deleted upon closing the file
     overwrite_cache: bool, optional, default: False
         If false, data will not be loaded if already present in cache
         If true, data in cache will be overwritten
     logger: logging.Logger, optional
         logger for this object - see simi.io.File for more info
-    
+
     Attributes
     ----------
     continuous_data
@@ -56,6 +56,7 @@ class OpenEphys(File):
     needs_recipe = True
     default_mode = "r"
     modes = ["r"]
+    supported_time_units = ["dt", "ms", "s"]
 
     def __init__(self, filename, **params):
         super().__init__(filename, **params)
@@ -99,11 +100,14 @@ class OpenEphys(File):
     def write(self, filename):
         raise NotImplementedError
 
-    @staticmethod
-    def read_timestamps(timestamps, start):
-        return pd.to_datetime(start, format="%d-%b-%Y %H%M%S") + pd.to_timedelta(
-            timestamps, unit="s"
-        )
+    def read_timestamps(self, timestamps, start):
+        if self.time_units == "dt":
+            start = pd.to_datetime(start, format="%d-%b-%Y %H%M%S")
+            return start + pd.to_timedelta(timestamps, unit="s")
+        elif self.time_units == "ms":
+            return timestamps * 1e3
+        elif self.time_units == "s":
+            return timestamps
 
     def _parse_continuous_data(self, cnt_data):
         header = json.loads(cnt_data["header"])
@@ -132,7 +136,7 @@ class OpenEphys(File):
         resample_freq: pd.DateOffset or str or None, optional, default: None
             valid time for new sample freq (e.g., '1L' or pd.offsets.Milli(1))
             if None, data is not resampled
-        
+
         Returns
         -------
         continuous_data: pd.DataFrame
@@ -185,7 +189,12 @@ class OpenEphys(File):
         vars = ["timestamps", "eventId", "channel"]
         evt_data_df = pd.DataFrame({var: evt_data[var].squeeze() for var in vars})
         evt_data_df["bitVal"] = 2 ** (7 - evt_data_df["channel"])
-        event_data = evt_data_df.query("eventId==1").groupby("timestamps").bitVal.sum()
+        event_data = (
+            evt_data_df.query("eventId==1")
+            .groupby("timestamps")
+            .bitVal.sum()
+            .astype(int)
+        )
         event_data.index = self.read_timestamps(
             timestamps=event_data.index, start=start_time
         )
@@ -199,108 +208,131 @@ class OpenEphys(File):
         )
         return event_data
 
-    def to_nex(self, nexfile_path, timestampFrequency, **params):
-        # TODO implement to_nex function
+    def to_nex(
+        self,
+        nexfile_path,
+        timestampFrequency,
+        PrethresholdTimeInSeconds=0.533,
+        recipe=None,
+        overwrite=False,
+        **params,
+    ):
+        self.time_units = "s"
         nexfile_path = Path(nexfile_path)
+        if nexfile_path.exists() and not overwrite:
+            raise FileExistsError(f"{nexfile_path} already exists")
+
+        if recipe is None:
+            recipe = self.recipe
+            self.logger.info(
+                "No conversion recipe provided. Using OE recipe to convert all files."
+            )
 
         start_time = time.time()
+        self.logger.info(f'Converting to nex file "{nexfile_path}"')
+
+        unit_as_char = lambda x: chr(int(x) - 1 + ord("a")) if x > 0 else "U"
+        out_data = {
+            "continuous": [],
+            "spikes": [],
+            "events": [],
+        }
+        self.logger.info("Preparing data specified in recipe")
+        for file in recipe:
+            self.logger.debug(f"Parsing {file}")
+            header = json.loads(self._data[file["type"]][file["name"]]["header"])
+            sampling_rate = int(header["sampleRate"])
+            if file["type"] == "spikes":
+                spike_data = self.get_spike_data([file["name"]])
+                for unit, untidata in spike_data.groupby("Unit"):
+                    waveforms = untidata.values
+                    neuron_name = file["name"] + unit_as_char(unit)
+                    out_data["spikes"].append(
+                        {
+                            "neuron_name": neuron_name,
+                            "wave_name": neuron_name + "_wf",
+                            "timestamps": untidata.index.get_level_values(
+                                "Timestamp"
+                            ).values,
+                            "SamplingRate": sampling_rate,
+                            "WaveformValues": waveforms,
+                            "NPointsWave": waveforms.shape[1],
+                            "PrethresholdTimeInSeconds": PrethresholdTimeInSeconds,
+                            "wire": file["channel"],
+                            "unit": int(unit),
+                        }
+                    )
+            elif file["type"] == "continuous":
+                continuous_data = self.get_continuous_data([file["name"]])[file["name"]]
+                resample_to = file.get("resample_to", sampling_rate)
+                if resample_to != sampling_rate:
+                    dt = 1 / resample_to
+                    timestamps = np.arange(
+                        continuous_data.min(), continuous_data.max() + dt / 2, dt
+                    )
+                    values = np.interp(
+                        timestamps, continuous_data.index.values, continuous_data.values
+                    )
+                    # continuous_data.reindex(timestamps).interpolate(
+                    #     method="nearest", inplace=True
+                    # )
+                else:
+                    values = continuous_data.values
+
+                out_data["continuous"].append(
+                    {
+                        "name": file["name"],
+                        "timestampOfFirstDataPoint": continuous_data.index[0],
+                        "values": values,
+                        "SamplingRate": resample_to,
+                    }
+                )
+            elif file["type"] == "events":
+                event_data = self.get_event_data([file["name"]])[file["name"]]
+                name, fieldName = file["name"].split("/")
+                out_data["events"].append(
+                    {
+                        "name": name,
+                        "fieldNames": np.array([fieldName]),
+                        "timestamps": event_data.index.values,
+                        "markerFields": np.array([event_data.values]),
+                    }
+                )
+
+        self.logger.info("Opening nex file to write data")
         with Nex(
-            nexfile_path, mode="w", timestampFrequency=timestampFrequency, **params
+            nexfile_path,
+            mode="w",
+            timestampFrequency=timestampFrequency,
+            logger=self.logger,
+            **params,
         ) as nexfile:
-            pass
+            self.logger.info("Writing continuous data")
+            for continuous_data in out_data["continuous"]:
+                nexfile.writer.AddContVarWithSingleFragment(**continuous_data)
+            self.logger.info("Writing spike and waveform data")
+            for spike_data in out_data["spikes"]:
+                nexfile.writer.AddNeuron(
+                    name=spike_data["neuron_name"],
+                    timestamps=spike_data["timestamps"],
+                    wire=spike_data["wire"],
+                    unit=spike_data["unit"],
+                )
+                nexfile.writer.AddWave(
+                    name=spike_data["wave_name"],
+                    timestamps=spike_data["timestamps"],
+                    SamplingRate=spike_data["SamplingRate"],
+                    WaveformValues=spike_data["WaveformValues"],
+                    NPointsWave=spike_data["NPointsWave"],
+                    PrethresholdTimeInSeconds=spike_data["PrethresholdTimeInSeconds"],
+                    wire=spike_data["wire"],
+                    unit=spike_data["unit"],
+                )
+            self.logger.info("Writing event data")
+            for event_data in out_data["events"]:
+                nexfile.writer.AddMarker(**event_data)
+            self.logger.info("Writing nex file to disk...")
 
         self.logger.info(f"\nSuccessfully wrote nexfile at path: {nexfile_path}")
         self.logger.info(f"Total time: {(time.time() - start_time):.3f} seconds\n\n")
         return nexfile
-
-    # unit_as_char = lambda x: chr(x - 1 + ord('a')) if x > 0 else 'U'
-    # writer = nexfile.NexWriter(SamplingRate_spikes, useNumpy=True)
-
-    # #add data
-    # for i in range(num_channels):
-    #     print("\nFor channel %d:" % (i + 1))
-    #     #load spike data
-    #     spike_fpath = os.path.join(ephys_path, f"{spike_prefix}.0n{i}.spikes")
-    #     spike_data = load(spike_fpath)
-
-    #     units = np.unique(spike_data['sortedId'])
-    #     for unit_num, unit_id in enumerate(units):
-    #         if spike_data['spikes'].shape[1] != NPointsWave:
-    #             raise ValueError(f'The spikes file at the following path has the wrong number of NPointsWave. \n fpath: {spike_fpath}')
-
-    #         unit_name = unit_as_char(unit_num)
-    #         neuron_name = f"sig{i + 1:03d}{unit_name}"
-    #         wave_name = f"{neuron_name}_wf"
-
-    #         idx = (spike_data['sortedId'].squeeze() == unit_id)
-
-    #         neuronTs = spike_data['timestamps'][idx]
-    #         WaveformValues = spike_data['spikes'][idx]
-
-    #         try:
-    #             while WaveformValues.ndim > 3:
-    #                 WaveformValues = WaveformValues.squeeze(axis=0)
-    #         except:
-    #             warnings.warn(f'Failed to shape WaveformValues appropriately. Skipping unit: {wave_name}')
-    #             continue
-
-    #         if WaveformValues.shape[1] != NPointsWave:
-    #             warnings.warn(f'Waveforms for unit {wave_name} has {WaveformValues.shape[1]} points instead of {NPointsWave} points as specified by arg NPointsWave. NPointsWave will be adjusted for this unit - there may be unintended consequences.')
-
-    #         #add neuron & spike waveforms
-    #         writer.AddNeuron(name = neuron_name, timestamps = neuronTs)
-    #         writer.AddWave(name = wave_name,
-    #         timestamps = neuronTs,
-    #         SamplingRate = SamplingRate_spikes,
-    #         WaveformValues = WaveformValues,
-    #         NPointsWave=NPointsWave,
-    #         PrethresholdTimeInSeconds=PrethresholdTimeInSeconds,
-    #         wire = channel,
-    #         unit = unit_num
-    #         )
-
-    #     #add continuous data
-    #     continuous_fpath = os.path.join(ephys_path, f"{LFP_prefix}{i + 1}.continuous")
-    #     continuous_data = load(continuous_fpath)
-
-    #     AD_name = f"AD{i + 1:02d}"
-
-    #     #decimates by factor 30, using Chebyshev type I infinite impulse response filter of order 8 (in theory this is the same as MATLAB decimate)
-    #     writer.AddContVarWithSingleFragment(name = AD_name,
-    #     timestampOfFirstDataPoint = continuous_data['timestamps'][0],
-    #     SamplingRate = SamplingRate_continuous,
-    #     values = scipy.signal.decimate(continuous_data['data'], 30)
-    #     )
-
-    # #add eye channels
-    # print("\nFor eye channel:")
-    # for eye_channel, fname in eye_channels.items():
-    #     continuous_fpath = os.path.join(ephys_path, fname)
-    #     continuous_data = load(continuous_fpath)
-
-    #     #decimates by factor 30, using Chebyshev type I infinite impulse response filter of order 8 (in theory this is the same as MATLAB decimate)
-    #     writer.AddContVarWithSingleFragment(name = eye_channel,
-    #     timestampOfFirstDataPoint = continuous_data['timestamps'][0],
-    #     SamplingRate = SamplingRate_continuous,
-    #     values = scipy.signal.decimate(continuous_data['data'], 30)
-    #     )
-
-    # #add event codes
-    # print('\nFor events:')
-    # event_fpath = os.path.join(ephys_path, 'all_channels.events')
-    # event_data = load(event_fpath)
-
-    # markers = []
-    # timestamps = []
-    # marker_val = 0
-    # for timestamp, channel, eventId in zip(event_data['timestamps'], 2**(7 - event_data['channel']), event_data['eventId']):
-    #     if eventId == 1:
-    #         marker_val += channel
-    #     else:
-    #         if marker_val:
-    #             markers.append(marker_val)
-    #             timestamps.append(timestamp)
-    #         marker_val = 0
-
-    # writer.AddMarker(name = 'Strobed', timestamps = np.array(timestamps), fieldNames = np.array(['DIO']), markerFields = np.array([[f'{int(marker):03d}' for marker in markers]]))
-    # writer.WriteNexFile(nexfile_path)

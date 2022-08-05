@@ -40,7 +40,7 @@ class Nex(File):
         If mode = 'w', timestampFrequency must be provided (in Hz). Else will be inferred from file.
     logger: logging.Logger, optional
         logger for this object - see simi.io.File for more info
-    
+
     Attributes
     ----------
     vartypes_dic
@@ -62,6 +62,7 @@ class Nex(File):
     default_mode = "r+"
     modes = ["r", "r+", "w"]
     isdir = False
+    supported_time_units = ["dt", "s", "ms"]
     vartypes_dict = {
         0: "neuron",
         1: "events",
@@ -162,7 +163,21 @@ class Nex(File):
         self._start_time = pd.to_datetime(start_time)
 
     def _get_timestamps(self, timestamps):
-        return pd.to_datetime(timestamps, unit="s", origin=self.start_time)
+        if self.time_units == "s":
+            return timestamps
+        elif self.time_units == "ms":
+            return timestamps * 1000
+        elif self.time_units == "dt":
+            return pd.to_datetime(timestamps, unit="s", origin=self.start_time)
+    
+    def _construct_time_index(self, start, stop, sampling_rate):
+        t = np.arange(start, stop, 1/sampling_rate)
+        if self.time_units == "s":
+            return t
+        elif self.time_units == "ms":
+            return t * 1000
+        elif self.time_units == "dt":
+            return pd.to_timedelta(t, unit="s")
 
     def _get_continuous_data(self, var):
         assert (
@@ -217,6 +232,21 @@ class Nex(File):
             ]
         )
 
+    def get_spike_timestamps(self):
+        data = pd.concat(
+            [
+                pd.DataFrame(
+                    {
+                        "Channel": [var["Header"]["Wire"]] * var["Timestamps"].size,
+                        "Unit": [var["Header"]["Unit"]] * var["Timestamps"].size,
+                        "Timestamps": self._get_timestamps(var["Timestamps"]),
+                    }
+                )
+                for var in self._vararray[self.vartypes == "waveforms"]
+            ]
+        )
+        return data
+
     def get_event_data(self):
         return pd.DataFrame(
             {
@@ -227,4 +257,3 @@ class Nex(File):
                 for name, markers in zip(var["MarkerFieldNames"], var["Markers"])
             }
         )
-

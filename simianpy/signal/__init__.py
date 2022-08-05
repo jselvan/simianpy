@@ -15,3 +15,4 @@ Modules
 from .convolve import Convolve
 from .fft import FFT
 from .filter import Filter
+from .sosfilter import sosFilter

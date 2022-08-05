@@ -39,6 +39,7 @@ import sys
 
 try:
     import numpy as np
+    from numpy import round
 except ImportError:
     import warnings
     warnings.warn('nexfile: unable to import numpy')

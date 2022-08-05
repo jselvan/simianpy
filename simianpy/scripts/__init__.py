@@ -1,7 +1,8 @@
-from .nex import Nex
-from .intan import Intan
-from .trodes import Trodes
-from .util import util
+from simianpy.scripts.openephys import OpenEphys
+from simianpy.scripts.nex import Nex
+from simianpy.scripts.intan import Intan
+from simianpy.scripts.trodes import Trodes
+from simianpy.scripts.util import util
 
 import click
 
@@ -11,6 +12,7 @@ def simi():
 
 simi.add_command(Nex)
 simi.add_command(Intan)
+simi.add_command(OpenEphys)
 simi.add_command(Trodes)
 simi.add_command(util)
 
