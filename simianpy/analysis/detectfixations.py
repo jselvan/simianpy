@@ -43,4 +43,5 @@ def DetectFixations(
             axis=1,
         )
     )
+    fixation_data.index.name = "fixationid"
     return fixation_data

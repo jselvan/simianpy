@@ -127,5 +127,6 @@ def DetectSaccades(
             saccade_data["latency"] = saccade_data["onset_t"]
 
     saccade_data.reset_index(drop=True, inplace=True)
+    saccade_data.index.name = "saccadeid"
 
     return saccade_data

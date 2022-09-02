@@ -26,7 +26,7 @@ class sosFilter(Filter):
         self.freq_bounds = freq_bounds
         self.sampling_frequency = sampling_frequency
 
-    def __call__(self, x, axis):
+    def __call__(self, x, axis=-1):
         return self.apply_fun(self._filter, x, axis=axis)
 
     def plot(self, ax=None, semilogx=False):
