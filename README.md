@@ -8,7 +8,13 @@
 ```
 
 # Installation  
-To install, clone this repo and run setuptools from the command line:
+
+To install directly from github, use pip (or pip3 as appropriate):
+```
+pip install git+https://github.com/jselvan/simianpy.git
+```
+
+Or to install locally, clone this repo and run setuptools from the command line:
 ```
 python setup.py install
 ```
