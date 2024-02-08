@@ -48,6 +48,7 @@ def Regression(
     drop_na=True,
     fitline=True,
     scatter=True,
+    text=False,
     engine="matplotlib",
     ax=None,
     fitline_kwargs={},
@@ -84,6 +85,14 @@ def Regression(
                 regression_output.data[regression_output.x_label],
                 regression_output.data[regression_output.y_label],
                 **scatter_kwargs,
+            )
+        if text:
+            ax.text(
+                0.05,
+                0.95,
+                str(regression_output).replace('; ', '\n'),
+                transform=ax.transAxes,
+                verticalalignment="top",
             )
         return ax
     else:

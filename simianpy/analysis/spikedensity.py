@@ -93,7 +93,6 @@ class GlobalOptimizationMixin:
         y /= self.sampling_rate
         return y
 
-
 class SDF(GlobalOptimizationMixin):
     """ A helper class for computing spike density functions
 

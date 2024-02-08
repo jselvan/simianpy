@@ -45,3 +45,31 @@ def get_scalar_mappable(vmin, vmax, cmap):
     norm = Normalize(vmin=vmin, vmax=vmax)
     sm = ScalarMappable(norm=norm, cmap=cmap)
     return sm
+
+# given a set of x or y coordinates, draw a line from that point on the axis to
+# the corresponding point on the provided curve, and a line from that point to the 
+# corresponding point on the other axis
+def draw_lines(x, y, vlines=None, hlines=None, ax=None, **kwargs):
+    import numpy as np
+    ax = get_ax(ax)
+    coords_x = []
+    coords_y = []
+    line_params = kwargs.pop("line_params", {})
+    if vlines is not None:
+        endpoints = np.interp(vlines, x, y)
+        ax.vlines(vlines, 0, endpoints, **line_params)
+        ax.hlines(endpoints, 0, vlines, **line_params)
+        coords_x.extend(vlines)
+        coords_y.extend(endpoints)
+    if hlines is not None:
+        endpoints = np.interp(hlines, y, x)
+        ax.hlines(hlines, 0, endpoints, **line_params)
+        ax.vlines(endpoints, 0, hlines, **line_params)
+        coords_x.extend(endpoints)
+        coords_y.extend(hlines)
+    label_template = kwargs.pop("label_template", "({x}, {y})")
+    label_params = kwargs.pop("label_params", {})
+    if coords_x and coords_y:
+        for x, y in zip(coords_x, coords_y):
+            ax.plot(x, y, label_template.format(x=x,y=y), **label_params)
+    return ax

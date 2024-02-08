@@ -12,3 +12,4 @@ from .binary_digitize import binary_digitize
 from .cupy import get_xp
 from .cut import cut
 from .logging import add_logging, getLogger
+from .parse_timeslice import TimeSlice, parse_timeslice

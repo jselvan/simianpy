@@ -6,6 +6,7 @@ ephys2nex -- convert OpenEphys files to Neuroexplorer (nex) files
 import os
 import time
 import warnings
+from itertools import groupby
 
 import numpy as np
 import scipy
@@ -37,21 +38,21 @@ def ephys2nex(
     nexfile_path: str
         valid path & file name where nexfile_path will be saved. This function will not overwrite an existing file. Must end with extension '.nex'
     SamplingRate_spikes: int; default = 3e4
-        sampling rate of .spikes files in Hz 
+        sampling rate of .spikes files in Hz
     SamplingRate_continuous: int; default = 1e3
-        sampling rate of .continuous files in Hz 
+        sampling rate of .continuous files in Hz
     num_channels: int; default = 32
-        number of channels 
+        number of channels
     NPointsWave: int; default = 40
-        number of data points in each waveform in .spikes files 
+        number of data points in each waveform in .spikes files
     PrethresholdTimeInSeconds: float; default = 0.533
         pre-threshold time in seconds
     spike_prefix: str; default = 'SEp115
-        prefix of all spike file names 
+        prefix of all spike file names
     LFP_prefix: str; default = '110_CH
-        prefix of all LFP file names 
+        prefix of all LFP file names
     eye_channels: dict <str:str>; default = {'eyeh': "110_ADC1.continuous", 'eyev': "110_ADC2.continuous"
-        dict containing file names for eyeh and eyev 
+        dict containing file names for eyeh and eyev
 
     Returns
     -------
@@ -168,21 +169,18 @@ def ephys2nex(
     event_fpath = os.path.join(ephys_path, "all_channels.events")
     event_data = load(event_fpath, logger)
 
-    markers = []
+    data = np.stack(
+        [event_data["timestamps"], event_data["eventId"], 2**(7-event_data["channel"])]
+    ).T.squeeze()
     timestamps = []
-    marker_val = 0
-    for timestamp, channel, eventId in zip(
-        event_data["timestamps"],
-        2 ** (7 - event_data["channel"]),
-        event_data["eventId"],
-    ):
-        if eventId == 1:
-            marker_val += channel
-        else:
-            if marker_val:
-                markers.append(marker_val)
-                timestamps.append(timestamp)
-            marker_val = 0
+    markers = []
+    for timestamp, values in groupby(data, lambda x: x[0]):
+        _, state, bits = list(zip(*values))
+        if state[0]:
+            markers.append(f"{int(sum(bits)):03d}")
+            timestamps.append(timestamp)
+    markers = np.array([markers])
+    timestamps = np.array(timestamps)
 
     # no clue why this is done but it was in MATLAB code
     # for i in range(len(markers) - 4):
@@ -191,12 +189,11 @@ def ephys2nex(
 
     writer.AddMarker(
         name="Strobed",
-        timestamps=np.array(timestamps).flatten(),
+        timestamps=timestamps,
         fieldNames=np.array(["DIO"]),
-        markerFields=np.array([[f"{int(marker):03d}" for marker in markers]]),
+        markerFields=markers,
     )
     writer.WriteNexFile(nexfile_path)
 
     logger.info(f"\nSuccessfully wrote nexfile at path: {nexfile_path}")
     logger.info(f"Total time: {(time.time() - start_time):.3f} seconds\n\n")
-

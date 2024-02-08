@@ -268,7 +268,7 @@ class OpenEphys(File):
                 if resample_to != sampling_rate:
                     dt = 1 / resample_to
                     timestamps = np.arange(
-                        continuous_data.min(), continuous_data.max() + dt / 2, dt
+                        continuous_data.index[0], continuous_data.index[-1] + dt / 2, dt
                     )
                     values = np.interp(
                         timestamps, continuous_data.index.values, continuous_data.values

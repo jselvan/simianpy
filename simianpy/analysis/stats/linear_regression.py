@@ -30,6 +30,10 @@ class LinearRegression:
 
     def __repr__(self):
         return f"x={self.x_label} & y={self.y_label}; y'={self.m}x+{self.b}; r={self.r}, p={self.p}"
+    
+    def __str__(self):
+        p = f"p={self.p:.3f}" if self.p > .001 else "p<.001"
+        return f"y'={self.m:.2f}x+{self.b:.2f}; r={self.r:.3f}, {p}"
 
     def __init__(self, x, y, data=None, drop_na=True, x_pred=None):
         if data is None:

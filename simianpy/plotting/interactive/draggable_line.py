@@ -24,6 +24,7 @@ class DraggableLine:
 
         self.add_to_axes(ax)
         self.picked = False
+        self.lock = False
         self.connect()
 
     def add_to_axes(self, ax):
@@ -49,16 +50,19 @@ class DraggableLine:
             "button_release_event", self.on_release
         )
 
+    def is_selected(self, event):
+        return any(event.artist == line for line in self.lines)
+
     def on_pick(self, event):
-        if any(event.artist == line for line in self.lines):
+        if self.lock: return
+        if self.is_selected(event):
             self.picked = True
             if self.pick_callback is not None:
                 self.pick_callback()
 
     def on_motion(self, event):
+        if self.lock or not self.picked: return
         self.pos = event.ydata if self.orientation == "h" else event.xdata
-        if not self.picked:
-            return
         if self.orientation == "h":
             for line in self.lines:
                 line.set_ydata([self.pos, self.pos])
@@ -68,6 +72,7 @@ class DraggableLine:
         self.canvas.draw_idle()
 
     def on_release(self, event):
+        if self.lock or not self.picked: return
         if self.orientation == "h":
             self.pos = self.lines[0].get_ydata()[0]
         else:

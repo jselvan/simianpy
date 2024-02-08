@@ -16,14 +16,14 @@ class Scatter:
             raise NotImplementedError('Only support for hist=="xy"')
         histx = "x" in hist
         histy = "y" in hist
-        if all(ax in kwargs for ax in self.axes_names):
-            self.ax_scatter, self.ax_histx, self.ax_histy = (
-                kwargs["ax_scatter"],
-                kwargs["ax_histx"],
-                kwargs["ax_histy"],
-            )
-        else:
-            self.ax_scatter, self.ax_histx, self.ax_histy = self.get_axes()
+        if not all(ax in kwargs for ax in self.axes_names):
+            kwargs.update(self.get_axes())
+        
+        self.ax_scatter, self.ax_histx, self.ax_histy = (
+            kwargs["ax_scatter"],
+            kwargs["ax_histx"],
+            kwargs["ax_histy"],
+        )
         self.ax_scatter.sharex(self.ax_histx)
         self.ax_scatter.sharey(self.ax_histy)
         self.ax_scatter.tick_params(direction="in", top=True, right=True)
@@ -49,6 +49,11 @@ class Scatter:
         hist_kwargs["orientation"] = "horizontal"
         hist_params["params"] = hist_kwargs
         Histogram(y, bins=ybins, ax=self.ax_histy, **hist_params)
+
+        if "xlabel" in kwargs:
+            self.ax_scatter.set_xlabel(kwargs["xlabel"])
+        if "ylabel" in kwargs:
+            self.ax_scatter.set_ylabel(kwargs["ylabel"])
 
     @classmethod
     def get_axes(cls):

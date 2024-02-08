@@ -170,8 +170,8 @@ class Nex(File):
         elif self.time_units == "dt":
             return pd.to_datetime(timestamps, unit="s", origin=self.start_time)
     
-    def _construct_time_index(self, start, stop, sampling_rate):
-        t = np.arange(start, stop, 1/sampling_rate)
+    def _construct_time_index(self, start, count, sampling_rate):
+        t = np.arange(count) / sampling_rate + start
         if self.time_units == "s":
             return t
         elif self.time_units == "ms":
@@ -187,11 +187,14 @@ class Nex(File):
             [
                 pd.Series(
                     var["ContinuousValues"][idx : idx + count],
-                    index=pd.date_range(
-                        timestamp,
-                        periods=count,
-                        freq=f"{1e3/var['Header']['SamplingRate']:.05f}L",
-                    ),
+                    index=self._construct_time_index(
+                        start=timestamp, count=count, sampling_rate=var['Header']['SamplingRate']
+                    )
+                    # pd.date_range(
+                    #     timestamp,
+                    #     periods=count,
+                    #     freq=f"{1e3/var['Header']['SamplingRate']:.05f}L",
+                    # ),
                 )
                 for timestamp, idx, count in zip(
                     self._get_timestamps(var["Timestamps"]),

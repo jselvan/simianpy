@@ -1,26 +1,9 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-from simianpy.plotting.util import get_ax
+from simianpy.plotting.util import get_ax, draw_lines
 
-try:
-    import holoviews as hv
-except ImportError:
-    hv = None
-else:
-    from holoviews import dim, opts
-
-default_params = {"matplotlib": {}, "holoviews": {}}
-
-
-def _histogram_holoviews(edges, frequencies):
-    if hv is None:
-        raise ImportError(
-            "holoviews module could not be imported. use a different engine"
-        )
-    hist = hv.Histogram((edges, frequencies))
-    return hist
-
+range_ = range
 
 def Histogram(
     data,
@@ -30,9 +13,13 @@ def Histogram(
     proportion=False,
     multiplier=1,
     invert=False,
-    engine="matplotlib",
     ax=None,
+    cumulative=False,
+    kind="bar",
+    prepend=None,
     params={},
+    quantiles=None,
+    quantile_params={},
 ):
     """ A convenience function for generating histograms
 
@@ -59,19 +46,16 @@ def Histogram(
         A scalar to multiple all the counts by
     invert: bool, optional; default = False
         If True, all frequencies are multiplied by -1 to flip upside down
-    engine: str, optional; default = 'holoviews'
-        Which plotting engine is to be used. Defaults to holoviews
-        Currently supported: ['holoviews']
     
     Returns
     -------
-    if 'engine' is 'holoviews', returns hv.Histogram
-    if 'engine' is 'matplotlib', returns ax
+    returns ax
     """
-    data = np.asarray(data)
-
     if proportion and density:
         raise ValueError("proportion and density cannot both be enabled")
+
+    data = np.asarray(data)
+    ax = get_ax(ax)
 
     weights = (
         np.ones_like(data) * proportion / data.size
@@ -81,48 +65,45 @@ def Histogram(
     if invert:
         weights *= -1
     weights = weights * multiplier
-    frequencies, edges = np.histogram(
+    counts, edges = np.histogram(
         data, bins, range, density=density, weights=weights
     )
 
-    if engine == "holoviews":
-        if invert:
-            frequencies *= -1
-        frequencies = frequencies * multiplier
-        if proportion or density:
-            raise NotImplementedError
-        hist = _histogram_holoviews(edges, frequencies)
-        return hist
-    elif engine == "matplotlib":
-        ax = get_ax(ax)
-        if params.get("histtype") == "line":
-            params.pop("histtype")
-            cumulative = params.pop("cumulative", False)
-            counts, edges = np.histogram(
-                data, bins=bins, range=range, density=density, weights=weights
-            )
-            if cumulative:
-                counts = np.cumsum(counts)
+    if cumulative:
+        counts = np.cumsum(counts)
 
-            align = params.pop("align", "mid")
-            if align == "left":
-                bin_align_points = edges[:-1]
-            elif align == "right":
-                bin_align_points = edges[1:]
-            else:
-                bin_align_points = np.mean([edges[:-1], edges[1:]], axis=0)
-
-            orientation = params.pop("orientation", "vertical")
-            if orientation == "vertical":
-                ax.plot(bin_align_points, counts, **params)
-            elif orientation == "horizontal":
-                ax.plot(counts, bin_align_points, **params)
-        else:
-            ax.hist(
-                data, bins=bins, range=range, density=density, weights=weights, **params
-            )
-        return ax
+    align = params.pop("align", "mid")
+    if align == "left":
+        bin_align_points = edges[:-1]
+    elif align == "right":
+        bin_align_points = edges[1:]
     else:
-        raise ValueError(
-            f"Engine not implemented: {engine}. Choose one of: ['holoviews','matplotlib']"
-        )
+        bin_align_points = np.mean([edges[:-1], edges[1:]], axis=0)
+
+    orientation = params.pop("orientation", "vertical")
+    if orientation == "vertical":
+        x, y = bin_align_points, counts
+    elif orientation == "horizontal":
+        x, y = counts, bin_align_points
+    
+    # prepend = params.pop("prepend", None)
+    if prepend is not None:
+        x = np.insert(x, 0, prepend[0])
+        y = np.insert(y, 0, prepend[1])
+    if kind == "bar":
+        ax.bar(x, y, **params)
+    elif kind == "line":
+        ax.plot(x, y, **params)
+
+    if quantiles is not None:
+        if not cumulative:
+            raise ValueError("quantiles can only be used with cumulative=True")
+        if not proportion:
+            quantiles = counts[-1] * quantiles
+        if orientation == "vertical":
+            quantile_params["hlines"] = quantiles
+        elif orientation == "horizontal":
+            quantile_params["vlines"] = quantiles
+
+        draw_lines(x, y, ax=ax, **quantile_params)
+    return ax

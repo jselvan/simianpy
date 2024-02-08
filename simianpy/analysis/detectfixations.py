@@ -16,6 +16,9 @@ def DetectFixations(
         velocity = (eye_data.apply(Filter).diff().abs() * sampling_rate).apply(Filter)
     fix = (velocity < velocity_threshold).all(axis=1)
     onset, offset = binary_digitize(fix)
+    if onset.size == 0 or offset.size == 0:
+        return pd.DataFrame()
+
     onset, offset = fix.index[onset], fix.index[offset]
 
     fixation_data = pd.DataFrame({"onset": onset, "offset": offset})

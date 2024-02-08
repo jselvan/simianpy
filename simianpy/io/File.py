@@ -18,7 +18,7 @@ class File:
     needs_recipe = False
     default_mode = "r"
     modes = ["r"]
-    supported_time_units = ["dt"]
+    supported_time_units = ["dt", "s"]
 
     def __init__(self, filename, **params):
         self.filename = Path(filename)
@@ -61,7 +61,7 @@ class File:
         if not (self.cache_path is None or self.use_cache):
             raise ValueError(f"cannot provide cache_path if use_cache is not True")
         
-        self.time_units = params.get("time_units", "dt")
+        self.time_units = params.get("time_units", "s")
         if self.time_units not in self.supported_time_units:
             raise ValueError(
                 f"Provided time_units '{self.time_units}' is not supported. Please provide one of: {self.supported_time_units}"
