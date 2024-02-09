@@ -46,11 +46,13 @@ def get_scalar_mappable(vmin, vmax, cmap):
     sm = ScalarMappable(norm=norm, cmap=cmap)
     return sm
 
+
 # given a set of x or y coordinates, draw a line from that point on the axis to
-# the corresponding point on the provided curve, and a line from that point to the 
+# the corresponding point on the provided curve, and a line from that point to the
 # corresponding point on the other axis
 def draw_lines(x, y, vlines=None, hlines=None, ax=None, **kwargs):
     import numpy as np
+
     ax = get_ax(ax)
     coords_x = []
     coords_y = []
@@ -71,5 +73,5 @@ def draw_lines(x, y, vlines=None, hlines=None, ax=None, **kwargs):
     label_params = kwargs.pop("label_params", {})
     if coords_x and coords_y:
         for x, y in zip(coords_x, coords_y):
-            ax.plot(x, y, label_template.format(x=x,y=y), **label_params)
+            ax.text(x, y, label_template.format(x=x, y=y), **label_params)
     return ax
