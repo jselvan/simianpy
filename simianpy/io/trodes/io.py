@@ -85,16 +85,27 @@ class Trodes(File):
         if self.pbar:
             channels = tqdm(channels, desc=f"Reading Analog Data ({name})")
 
+        single_file = info.get("single_file", False)
+        if single_file:
+            # this is extracted with a newer version of trodes,
+            # resulting in a single file instead of multiple
+            filepath = self.filename/info["file_template_str"].format(name=self.session_name)
+            _, analog_data = readTrodesExtractedDataFile(filepath, mmap_mode=mmap_mode)
+
+
         for channel in channels:
             if channel is None:
                 continue
-            channel_file = self.filename / info["file_template_str"].format(
-                name=self.session_name, channel=channel
-            )
-            _, channeldata = readTrodesExtractedDataFile(
-                channel_file, mmap_mode=mmap_mode
-            )
-            data[channel] = channeldata["voltage"].squeeze()
+            if single_file:
+                data[channel] = analog_data[:, channel-1]
+            else:
+                channel_file = self.filename / info["file_template_str"].format(
+                    name=self.session_name, channel=channel
+                )
+                _, channeldata = readTrodesExtractedDataFile(
+                    channel_file, mmap_mode=mmap_mode
+                )
+                data[channel] = channeldata["voltage"].squeeze()
 
         return timestamps, data
 
