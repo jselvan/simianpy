@@ -91,7 +91,7 @@ class Trodes(File):
             # resulting in a single file instead of multiple
             filepath = self.filename/info["file_template_str"].format(name=self.session_name)
             _, analog_data = readTrodesExtractedDataFile(filepath, mmap_mode=mmap_mode)
-
+            analog_data = analog_data['voltage']
 
         for channel in channels:
             if channel is None:
