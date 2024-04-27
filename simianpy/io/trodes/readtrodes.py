@@ -2,9 +2,7 @@ import re
 
 import numpy as np
 
-
-# Main function
-def readTrodesExtractedDataFile(filename, mmap_mode=None):
+def read_header(filename):
     with open(filename, "rb") as f:
         if f.readline().decode("ascii").strip() != "<Start settings>":
             raise Exception("Settings format not supported")
@@ -17,6 +15,11 @@ def readTrodesExtractedDataFile(filename, mmap_mode=None):
                 key, value = line.split(": ", 1)
                 fieldsText[key.lower()] = value
         offset = f.tell()
+    return fieldsText, offset
+
+# Main function
+def readTrodesExtractedDataFile(filename, mmap_mode=None):
+    fieldsText, offset = read_header(filename)
     dtype = parseFields(fieldsText["fields"])
     if mmap_mode is not None:
         data = np.memmap(filename, dtype=dtype, offset=offset, mode=mmap_mode)
