@@ -5,13 +5,11 @@ import warnings
 
 import simianpy as simi
 
-sampling_rate = 2.5e3
 power_bands = {
     "alpha": (15, 22),
     "gamma": (80, 150)
 }
-
-def get_multitaper_lfp_power(lfp, depths, NFFT=None, NW=2.5, k=None):
+def get_multitaper_lfp_power(lfp, depths, sampling_rate, NFFT=None, NW=2.5, k=None):
     """get multitaper lfp power
 
     Parameters
@@ -23,19 +21,32 @@ def get_multitaper_lfp_power(lfp, depths, NFFT=None, NW=2.5, k=None):
     NW : float, default 2.5
         time-bandwidth product
     k : int, default None
-        number of tapers, if None, k = NW**2
+        number of tapers, if None, k = NW*2
     """
-    from spectrum import dpss
+    try:
+        use_scipy=False
+        from spectrum import dpss
+    except ImportError:
+        use_scipy=True
+        from scipy.signal.windows import dpss
 
     n_trials, n_samples, n_channels = lfp.shape
     if NFFT=='auto':
         NFFT = max(256, int(2**np.ceil(np.log2(n_samples))))
     elif NFFT==None:
         NFFT = n_samples
-    [tapers, eigenvalues] = dpss(n_samples, NW, k)
-    n_win = eigenvalues.size
+    
+    if use_scipy:
+        if k is None:
+            k = int(NW*2)
+        tapers = dpss(n_samples, NW, k).T
+    else:
+        tapers, eigenvalues = dpss(n_samples, NW, k)
 
     # get multitaper lfp power
+    # tapers dimensions: (n_tapers, n_samples)
+    # lfp dimensions: (n_trials, n_samples, n_channels)
+    # Sk_complex dimensions: (n_tapers, n_trials, freq, n_channels)
     Sk_complex = np.fft.fft(np.expand_dims(tapers.T, (1,3)) * np.expand_dims(lfp, 0), NFFT, axis=2)
 
     # grab the real part
