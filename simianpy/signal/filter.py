@@ -74,6 +74,18 @@ class Filter:
         """Filter input data"""
         return self.apply_fun(*self._filter, input_data, axis=axis)
 
+    def apply_xarray(self, arr, dim=None):
+        """Filter xarray data"""
+        import xarray as xr
+        if dim is None:
+            dim = xr.dims[-1]
+        return xr.apply_ufunc(
+            self.__call__,
+            arr,
+            input_core_dims=[[dim]],
+            output_core_dims=[[dim]],
+        )
+
     def check(self, input_data, ax=None):
         if ax is None:
             _, ax = plt.subplots()
