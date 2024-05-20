@@ -9,7 +9,7 @@ power_bands = {
     "alpha": (15, 22),
     "gamma": (80, 150)
 }
-def get_multitaper_lfp_power(lfp, depths, sampling_rate, NFFT=None, NW=2.5, k=None):
+def get_multitaper_lfp_power(lfp, depths, sampling_rate, NFFT=None, NW=2.5, k=None, normalize=True):
     """get multitaper lfp power
 
     Parameters
@@ -59,7 +59,8 @@ def get_multitaper_lfp_power(lfp, depths, sampling_rate, NFFT=None, NW=2.5, k=No
     psd = psd.mean(axis=(0,1))
 
     # normalize to max power across channels
-    psd /= psd.max(axis=-1, keepdims=True)
+    if normalize:
+        psd /= psd.max(axis=-1, keepdims=True)
     psd_df = pd.DataFrame(psd, index=pd.Index(freq, name='freq'), columns=pd.Index(depths, name='depth')).loc[0:150]
     return psd_df
 
