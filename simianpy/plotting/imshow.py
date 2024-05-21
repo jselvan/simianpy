@@ -21,6 +21,7 @@ class Image:
         if data is None:
             data = pd.DataFrame({"x": x, "y": y, "z": z})
             x, y, z = "x", "y", "z"
+        self.dims = x, y, z
         data = (
             data.reset_index()
             .set_index([y, x])
@@ -50,6 +51,18 @@ class Image:
         if y is None:
             y = np.arange(data.shape[0])
         return cls(x, y, z=zlabel, data=data, xlabel=xlabel, ylabel=ylabel, **kwargs)
+
+    def update_from_dataframe(self, data):
+        x, y, z = self.dims
+        self.data = (
+            data.reset_index()
+            .set_index([y, x])
+            .unstack(x)[z]
+            .sort_index(ascending=False)
+        )
+        self.im.set_data(self.data.values)
+        if self.cbar is not None:
+            self.cbar.update_normal(self.im)
 
     # TODO: move the standard implementation to from_dataframe and make this
     #  implementation work from raw data?
