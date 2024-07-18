@@ -104,7 +104,7 @@ class SDF(GlobalOptimizationMixin):
         If 'optimal', a globally optimal bandwidth is used to convolve a gaussian
         NOTE: 'optimal'  has some weird behaviour, further testing required
         If callable, the provided object is called on the binarized data
-        If None, `window` and\or `window_size` must be provided
+        If None, `window` and/or `window_size` must be provided
     window, window_size: default=None
         ignored if `convolve` is not None, else required
         `window_size` is inferred from `window` if not provided
