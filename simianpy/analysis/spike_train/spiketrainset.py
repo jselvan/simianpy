@@ -142,15 +142,15 @@ class SpikeTrainSet:
             If neither time_bins nor time_step is provided
         """
         if not time_step is None:
-            time_bins = np.arange(*self.window, time_step)
+            left, right = self.window
+            time_bins = np.arange(left, right+time_step, time_step)
         if time_bins is None:
             raise ValueError("Either time_bins or time_step must be provided")
         
         trialids_unique, trialids_digitized = np.unique(self.trialids, return_inverse=True)
         unitids_unique, unitids_digitized = np.unique(self.unitids, return_inverse=True)
-        spike_times_digitized = np.digitize(self.spike_times, time_bins)
         psth, _ = np.histogramdd(
-            np.array([trialids_digitized, unitids_digitized, spike_times_digitized]).T,
+            np.array([trialids_digitized, unitids_digitized, self.spike_times]).T,
             bins=[
                 np.arange(trialids_unique.size + 1),
                 np.arange(unitids_unique.size + 1),
