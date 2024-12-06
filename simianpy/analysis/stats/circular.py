@@ -2,29 +2,32 @@ import numpy as np
 from scipy.stats import circmean, norm
 
 
-def circ_r(x, w=None):
-    """Compute the circular correlation coefficient between two circular variables.
+def circ_r(x, w=None, axis: int=-1) -> float:
+    """Computes the mean resultant length of a circular variable x weighted by w
 
     Parameters
     ----------
     x : array_like
-        First circular variable.
+        Circular variable
     w : array_like, optional
+        Weights
 
     Returns
     -------
     r : float
-        Circular correlation coefficient.
+        Mean resultant length
+        0 = uniform distribution
+        1 = perfectly aligned
     """
     if w is None:
         w = np.ones_like(x)
 
-    r = (w * np.exp(1j * x)).sum()
-    r = np.abs(r) / w.sum()
+    r = (w * np.exp(1j * x)).sum(axis)
+    r = np.abs(r) / w.sum(axis)
     return r
 
 
-def circ_corrcc(x, y, axis=-1, correction_uniform=False):
+def circ_corrcc(x, y, axis: int=-1, correction_uniform: bool=False) -> tuple[float, float]:
     """
     Compute circular correlation coefficient between two circular variables.
 
@@ -42,6 +45,7 @@ def circ_corrcc(x, y, axis=-1, correction_uniform=False):
     -------
     r : array-like
         Circular correlation coefficient.
+
     p : array-like
         2-tailed p-value.
     """
@@ -55,18 +59,20 @@ def circ_corrcc(x, y, axis=-1, correction_uniform=False):
         )
     n = x.shape[axis]
     x_sin = np.sin(x - np.expand_dims(circmean(x, high=np.pi, low=-np.pi, axis=axis), axis))
+    x_sin_sq = x_sin**2
     y_sin = np.sin(y - np.expand_dims(circmean(y, high=np.pi, low=-np.pi, axis=axis), axis))
+    y_sin_sq = y_sin**2
 
     num = (x_sin * y_sin).sum(axis=axis)
-    den = ((x_sin**2).sum(axis=axis) * (y_sin**2).sum(axis=axis)) ** 0.5
+    den = (x_sin_sq.sum(axis=axis) * y_sin_sq.sum(axis=axis)) ** 0.5
     rho = num / den
 
     tval = (
         np.sqrt(
             n
-            * (x_sin**2).mean(axis=axis)
-            * (y_sin**2).mean(axis=axis)
-            / ((x_sin**2) * (y_sin**2)).mean(axis=axis)
+            * x_sin_sq.mean(axis=axis)
+            * y_sin_sq.mean(axis=axis)
+            / (x_sin_sq * y_sin_sq).mean(axis=axis)
         )
         * rho
     )
