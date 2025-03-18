@@ -167,3 +167,16 @@ class SpikeTrainSet:
             dims=['trialid', 'unitid', 'time']
         )
         return psth
+
+    def get_firing_rates(self, window=None):
+        if window is None:
+            # check that the window is within the range of the spike times
+            if window[0] < self.window[0] or window[1] > self.window[1]:
+                raise ValueError("Window must be within the range of the provided SpikeTrainSet")
+            window = self.window
+        duration = window[1] - window[0]
+        fr = self.to_psth(time_bins=window) / duration
+        return fr
+
+    def to_sdf(self, convolve, window="psp", window_size=None):
+        pass

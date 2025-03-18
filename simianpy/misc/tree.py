@@ -35,8 +35,22 @@ class Tree:
         for key, val in d.items():
             if isinstance(val, dict):
                 self.add_node(Tree.from_dict(key, val, recurse=recurse))
+            elif isinstance(val, list) and recurse:
+                self.add_node(Tree.from_list(key, val, recurse=recurse))
             else:
                 self.add_node(Tree(key, [val] if include_values else None))
+        return self
+    
+    @classmethod
+    def from_list(cls, name, l, recurse=True):
+        self = cls(name)
+        for idx, val in enumerate(l):
+            if isinstance(val, dict):
+                self.add_node(Tree.from_dict(str(idx), val, recurse=recurse))
+            elif isinstance(val, list):
+                self.add_node(Tree.from_list(str(idx), val, recurse=recurse))
+            else:
+                self.add_node(Tree(str(idx), [val]))
         return self
 
     @classmethod
