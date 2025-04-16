@@ -114,6 +114,7 @@ class GazeData:
         velocity_query: query_fmt, 
         duration_query: Optional[query_fmt]=None, 
         peak_velocity_query: Optional[query_fmt]=None, 
+        amplitude_query: Optional[query_fmt]=None, 
         velocity_params={}
     ):
         data = self.identify_velocity_events(velocity_query, velocity_params)
@@ -145,7 +146,9 @@ class GazeData:
 
         # if queries are provided, filter the data
         query_mask = (parse_query(computed['duration'], duration_query) 
-            & parse_query(computed['peak_velocity'], peak_velocity_query))
+            & parse_query(computed['peak_velocity'], peak_velocity_query)
+            & parse_query(computed['amplitude'], amplitude_query)
+        )
         query_idx = np.where(query_mask)[0]
         for key, value in computed.items():
             computed[key] = value[query_idx]
@@ -196,3 +199,35 @@ class GazeData:
                     data[key].append(record)
             result.append(data)
         return result
+
+    def view(self):
+        try:
+            from pyqtmgl.widgets.continuous_viewer import ContinuousViewer
+            from pyqtmgl.test.runner import run_dockable
+        except ImportError:
+            raise ImportError("pyqtmgl is not installed. Please install it to use this function.")
+
+        ORANGE = (1, 0.5, 0)
+        BLUE = (0, 0, 1)
+
+        WHITE = (1, 1, 1)
+        RED = (1, 0, 0)
+        SACCADE_COLOUR = WHITE
+        FIX_COLOUR = RED
+        points = self.data.values.T
+        colours = np.ones([points.shape[0], points.shape[1], 3])
+        colours[0, :] = ORANGE
+        colours[1, :] = BLUE
+        for key, data in self.inferred.items():
+            for onset_t, offset_t in zip(data['onset.time'], data['offset.time']):
+                onset = self.data.get_index('time').get_loc(onset_t)
+                offset = self.data.get_index('time').get_loc(offset_t)
+                tslice = slice(onset, offset)
+                if key == 'saccades':
+                    colours[:, tslice] = SACCADE_COLOUR
+                elif key == 'fixations':
+                    colours[:, tslice] = FIX_COLOUR
+                else:
+                    raise ValueError(f"Unknown event type: {key}")
+
+        run_dockable([ContinuousViewer], points=points, colours=colours)
