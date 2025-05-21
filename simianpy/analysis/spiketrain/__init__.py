@@ -3,8 +3,8 @@ from collections import namedtuple
 import numpy as np
 import scipy.stats
 
-from .get_spikes_by_event import get_spikes_by_event
-from .psth_factory import psth_factory
+from .spiketrainset import SpikeTrainSet
+# from .psth_factory import psth_factory
 
 def ISI(spike_train):
     isi = np.diff(spike_train)
