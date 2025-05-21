@@ -1,4 +1,4 @@
-from numbers import Number
+from typing import SupportsFloat as Number
 from typing import Optional, Mapping, Sequence, Literal, Callable
 from itertools import product
 
@@ -55,15 +55,18 @@ class GazeData:
             The number of samples around "blink" events to mask, by default None
         """
         blink_start, blink_end = binary_digitize((np.abs(self.data) >= threshold).any('dimension'))
-        blink_start = np.clip(blink_start-pad, 0, self.blink_mask.size, out=blink_start)
-        blink_end = np.clip(blink_end+pad, 0, self.blink_mask.size, out=blink_end)
-        idx = np.concatenate([np.arange(start, end) for start, end in zip(blink_start, blink_end)])
+        if pad is not None:
+            blink_start = np.clip(blink_start-pad, 0, self.blink_mask.size, out=blink_start)
+            blink_end = np.clip(blink_end+pad, 0, self.blink_mask.size, out=blink_end)
+        if blink_start.size != 0:
+            idx = np.concatenate([np.arange(start, end) for start, end in zip(blink_start, blink_end)])
         self.blink_mask[idx] = False
 
     def differentiate(self, 
             diff_method: Literal["radial"]="radial", 
             diff_dimensions: Optional[str | Sequence[str]]=None, 
-            filter_method: Optional[Callable[[np.ndarray], np.ndarray]]=None
+            pre_filter_method: Optional[Callable[[xr.DataArray], xr.DataArray]]=None,
+            post_filter_method: Optional[Callable[[xr.DataArray], xr.DataArray]]=None
         ) -> np.ndarray:
         """Differentiate gaze data
 
@@ -75,8 +78,9 @@ class GazeData:
         diff_dimensions : str | list[str] | None, optional
             Select a single or a subset of dimensions
             If None, selects all dimensions, by default None
-        filter_method : Callable, optional
-            If provided, applies this function to the data, by default None
+        (pre_/post_)filter_method : Callable, optional
+            If provided, applies this function to the data before or after differentiation
+            by default None
 
         Returns
         -------
@@ -94,9 +98,11 @@ class GazeData:
                 data = self.data
             else:
                 data = self.data.sel(dimension=diff_dimensions)
+            if pre_filter_method is not None:
+                data = xr.apply_ufunc(pre_filter_method, data, input_core_dims=[['dimension', 'time']], output_core_dims=[['dimension','time']])
             difference = data.diff("time")
-            if filter_method is not None:
-                difference = filter_method(difference)
+            if post_filter_method is not None:
+                difference = xr.apply_ufunc(post_filter_method, difference, input_core_dims=[['dimension', 'time']], output_core_dims=[['dimension','time']])
             difference = np.hypot(*difference.transpose("dimension", "time"))
         else:
             raise ValueError
@@ -123,11 +129,11 @@ class GazeData:
         # compute some derived quantities
         computed = {}
         for field in ['onset', 'offset']:
-            computed[f'{field}.time'] = self.data.time[data[field]].values
+            computed[f'{field}_time'] = self.data.time[data[field]].values
             for dim in dimensions:
-                computed[f'{field}.{dim}'] = self.data.isel(time=data[field]).sel(dimension=dim).values
-        computed['duration'] =  computed['offset.time'] - computed['onset.time']
-        computed['amplitude'] = np.hypot(*[computed[f'offset.{dim}']-computed[f'onset.{dim}'] for dim in dimensions])
+                computed[f'{field}_{dim}'] = self.data.isel(time=data[field]).sel(dimension=dim).values
+        computed['duration'] =  computed['offset_time'] - computed['onset_time']
+        computed['amplitude'] = np.hypot(*[computed[f'offset_{dim}']-computed[f'onset_{dim}'] for dim in dimensions])
 
         # indices = np.stack([data['onset'], data['offset']]).T.flatten()
         indices = np.concatenate([np.arange(onset, offset) for (onset, offset) in zip(data['onset'], data['offset'])])
@@ -159,25 +165,35 @@ class GazeData:
 
     def get_fixations(self, velocity_query: query_fmt, duration_query: Optional[query_fmt]=None, velocity_params={}):
         data = self.identify_velocity_events(velocity_query, velocity_params)
-        dimensions = self.data.dimensions
+        dimensions = [dim.item() for dim in self.data.dimension]
 
-        records = []
-        for idx in range(data['onsets'].size):
-            record = {}
-            for field in ['onset', 'offset']:
-                record[f'{field}.time'] = self.data.time[data[field][idx]]
-            record['duration'] = duration = record['offset.time'] - record['onset.time']
-            if not parse_query(duration, duration_query): continue
+        # compute some derived quantities
+        computed = {}
+        for field in ['onset', 'offset']:
+            computed[f'{field}_time'] = self.data.time[data[field]].values
+        computed['duration'] =  computed['offset_time'] - computed['onset_time']
 
-            tslice = slice(record['onset.time'], record['offset.time'])
-            position = self.data.sel(time=tslice).mean('time')
-            for dim in dimensions:
-                record[dim] = position.sel(dimension=dim)
-            records.append(record)
+        #TODO: maybe mask fixations before computing the positions
 
-        self.inferred['fixations'] = records
+        # compute the mean position in case of drift
+        indices = np.concatenate([np.arange(onset, offset) for (onset, offset) in zip(data['onset'], data['offset'])])
+        fixation_id = np.concatenate([np.ones(offset-onset)*idx for idx, (onset, offset) in enumerate(zip(data['onset'], data['offset']))])
+        position_traces = self.data.isel(time=indices).values
 
-        return records
+        counts = data['offset'] - data['onset']
+        indices = np.insert(np.cumsum(counts[:-1]), 0, 0)
+        mean_position = np.add.reduceat(position_traces, indices, axis=0) / counts[:, None]
+        for i, dim in enumerate(dimensions):
+            computed[dim] = mean_position[:, i]
+
+        query_mask = parse_query(computed['duration'], duration_query)
+        query_idx = np.where(query_mask)[0]
+        for key, value in computed.items():
+            computed[key] = value[query_idx]
+
+        self.inferred['fixations'] = computed
+
+        return computed
 
     def get_by_events(self, events, bounds):
         left, right = bounds
