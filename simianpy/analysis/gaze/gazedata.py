@@ -1,9 +1,10 @@
 from typing import SupportsFloat as Number
-from typing import Optional, Mapping, Sequence, Literal, Callable
+from typing import Optional, Mapping, Sequence, Literal, Callable, Dict
 from itertools import product
 
 import numpy as np
 from numpy.typing import ArrayLike
+import pandas as pd
 import xarray as xr
 
 from simianpy.misc import binary_digitize
@@ -26,7 +27,7 @@ class GazeData:
         if blink_mask is None:
             blink_mask = np.ones(self.data.time.size, dtype=bool)
         self.blink_mask = blink_mask
-        self.inferred = {}
+        self.inferred: Dict[str, pd.DataFrame] = {}
     
     @classmethod
     def from_arrays(cls, 
@@ -159,6 +160,7 @@ class GazeData:
         for key, value in computed.items():
             computed[key] = value[query_idx]
 
+        computed = pd.DataFrame(computed)
         self.inferred['saccades'] = computed
 
         return computed
@@ -191,30 +193,11 @@ class GazeData:
         for key, value in computed.items():
             computed[key] = value[query_idx]
 
+        computed = pd.DataFrame(computed)
+
         self.inferred['fixations'] = computed
 
         return computed
-
-    def get_by_events(self, events, bounds):
-        left, right = bounds
-        result = []
-        for event in events:
-            data = {}
-            l, r = event['timestamp']+left, event['timestamp']+right
-            data['trace'] = trace = self.data.sel(time=slice(l, r)).copy()
-            data['mask'] = mask = self.blink_mask[l:r]
-            trace.time = trace.time - event['timestamp']
-
-            for key, value in self.inferred.items():
-                data[key] = []
-                for record in value:
-                    if r <= record['onset.time'] or record['offset.time'] <= l:
-                        continue
-                    relative_record = record.copy()
-                    relative_record['latency'] = record['onset.time'] - event['timestamp']
-                    data[key].append(record)
-            result.append(data)
-        return result
 
     def view(self):
         try:
@@ -247,3 +230,69 @@ class GazeData:
                     raise ValueError(f"Unknown event type: {key}")
 
         run_dockable([ContinuousViewer], points=points, colours=colours)
+
+    def save(self, path: str):
+        """Save the gaze data to a zip file
+
+        Parameters
+        ----------
+        path : str
+            The path to save the data to
+        """
+        import os
+        import zipfile
+        import json
+
+        with zipfile.ZipFile(path, 'w') as zf:
+            # Save the data
+            with zf.open('time.npy', 'w') as f:
+                np.save(f, self.data.time)
+            with zf.open('position.npy', 'w') as f:
+                np.save(f, self.data.values)
+            zf.writestr('dimensions.txt', '\n'.join(self.data.dimension.values).encode('utf-8'))
+            # Save the blink mask
+            np.save(zf.open('blink_mask.npy', 'w'), self.blink_mask)
+            # Save the inferred events
+            for key, value in self.inferred.items():
+                with zf.open(f'{key}.csv', 'w') as f:
+                    value.to_csv(f, index=False)
+            
+    @classmethod
+    def load(cls, path: str):
+        """Load the gaze data from a zip file
+
+        Parameters
+        ----------
+        path : str
+            The path to load the data from
+
+        Returns
+        -------
+        GazeData
+            The loaded gaze data
+        """
+        import os
+        import zipfile
+        import json
+
+        with zipfile.ZipFile(path, 'r') as zf:
+            # Load the data
+            time = np.load(zf.open('time.npy'))
+            position = np.load(zf.open('position.npy'))
+            with zf.open('dimensions.txt') as f:
+                dimensions = f.read().decode('utf-8').split('\n')
+            
+            
+            # Load the blink mask
+            blink_mask = np.load(zf.open('blink_mask.npy'))
+            # Load the inferred events
+            inferred = {}
+            for name in zf.namelist():
+                if name.endswith('.csv'):
+                    event = name.replace('.csv', '')
+                    with zf.open(name) as f:
+                        inferred[event] = pd.read_csv(f)
+
+        gd = cls.from_arrays(time, position, dimensions, blink_mask)
+        gd.inferred = inferred
+        return gd
