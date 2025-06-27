@@ -13,6 +13,7 @@ setup(
         "numpy",
         "scipy",
         "pandas",
+        "xarray",
         "matplotlib",
         "pyyaml",
         "h5py",
@@ -20,7 +21,9 @@ setup(
         "tqdm",
         "click",
     ],
-    extras_require={"FULL": ["colorama", "holoviews", "bokeh", "ipython"]},
+    extras_require={
+        "FULL": ["colorama", "ipython", "pyqtmgl @ git+https://github.com/jselvan/pyqtmgl.git"]
+    },
     entry_points="""
         [console_scripts]
         simi=simianpy.scripts:simi

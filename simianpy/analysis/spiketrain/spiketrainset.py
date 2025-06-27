@@ -1,11 +1,19 @@
-from typing import Optional, Sequence, Tuple
+from typing import Optional, Sequence, Tuple, Mapping
 import zipfile
+import io
 
 import numpy as np
 from numpy.typing import ArrayLike
 import pandas as pd
 import xarray as xr
 
+
+try:
+    from simianpy.analysis.spiketrain.spiketrainsetviewer import launch_viewer
+except ImportError:
+    pyqtmgl = False
+else:
+    pyqtmgl = True
 
 class SpikeTrainSet:
     def __init__(
@@ -14,6 +22,9 @@ class SpikeTrainSet:
         unitids: np.ndarray,
         spike_times: np.ndarray,
         window: Optional[Tuple[float, float]] = None,
+        trial_metadata: Optional[pd.DataFrame] = None,
+        epochids: Optional[np.ndarray] = None,
+        epoch_names: Optional[Sequence[str]] = None,
     ):
         """Initialize SpikeTrainSet
 
@@ -42,9 +53,22 @@ class SpikeTrainSet:
         if window is None:
             window = (self.spike_times.min(), self.spike_times.max())
         self.window = window
-        # ensure that they are all the same length
         if not (len(trialids) == len(unitids) == len(spike_times)):
             raise ValueError("All inputs must be the same length")
+        if trial_metadata is not None:
+            trialids_unique = np.unique(trialids)
+            trial_metadata = trial_metadata.loc[trialids_unique]
+            self.trial_metadata = trial_metadata
+        else:
+            self.trial_metadata = None
+        # Epoch support
+        if epochids is not None:
+            self.epochids = epochids
+            self.n_epochs = np.unique(epochids).size
+        else:
+            self.epochids = None
+            self.n_epochs = None
+        self.epoch_names = epoch_names
 
     @classmethod
     def from_arrays(
@@ -54,6 +78,8 @@ class SpikeTrainSet:
         window: Tuple[float, float],
         spike_labels: Optional[ArrayLike] = None,
         event_labels: Optional[ArrayLike] = None,
+        trial_metadata: Optional[pd.DataFrame] = None,
+        epoch_names: Optional[Sequence[str]] = None,
     ) -> "SpikeTrainSet":
         """Generate SpikeTrainSet from arrays of spike and event timestamps
 
@@ -69,6 +95,8 @@ class SpikeTrainSet:
             Array of spike labels
         event_labels : array_like or None
             Array of event labels
+        epoch_names : list or None
+            List of epoch names, must match number of epochs if provided
 
         Returns
         -------
@@ -76,33 +104,58 @@ class SpikeTrainSet:
         """
         spike_timestamps = np.array(spike_timestamps)
         event_timestamps = np.array(event_timestamps)
+        is_2d = event_timestamps.ndim == 2
         if spike_labels is None:
             spike_labels = np.zeros(len(spike_timestamps), dtype=np.int32)
         else:
             spike_labels = np.array(spike_labels)
         if event_labels is None:
-            event_labels = np.arange(len(event_timestamps), dtype=np.int32)
+            
+            event_labels = np.arange(event_timestamps.shape[0], dtype=np.int32)
         else:
             event_labels = np.array(event_labels)
-
+        if is_2d:
+            n_events, n_epochs = event_timestamps.shape
+            # Flatten event_timestamps, repeat event_labels and epochids
+            event_timestamps_flat = event_timestamps.flatten()
+            event_labels_flat = np.repeat(event_labels, n_epochs)
+            epochids = np.tile(np.arange(n_epochs), n_events)
+            if epoch_names is not None:
+                epoch_names = list(epoch_names)
+                if len(epoch_names) != n_epochs:
+                    raise ValueError("Length of epoch_names must match number of epochs")
+            else:
+                epoch_names = [str(i) for i in range(n_epochs)]
+        else:
+            event_timestamps_flat = event_timestamps
+            event_labels_flat = event_labels
+            epochids = None
+            epoch_names = None
         spk_sort_idx = np.argsort(spike_timestamps)
-        evt_sort_idx = np.argsort(event_timestamps)
+        evt_sort_idx = np.argsort(event_timestamps_flat)
         spike_timestamps = spike_timestamps[spk_sort_idx]
         spike_labels = spike_labels[spk_sort_idx]
-        event_timestamps = event_timestamps[evt_sort_idx]
-        event_labels = event_labels[evt_sort_idx]
-
-        left, right = event_timestamps + window[0], event_timestamps + window[1]
+        event_timestamps_flat = event_timestamps_flat[evt_sort_idx]
+        event_labels_flat = event_labels_flat[evt_sort_idx]
+        if epochids is not None:
+            epochids = np.array(epochids)[evt_sort_idx]
+        left, right = event_timestamps_flat + window[0], event_timestamps_flat + window[1]
         lidx = np.searchsorted(spike_timestamps, left, side="left")
         ridx = np.searchsorted(spike_timestamps, right, side="right")
         lengths = ridx - lidx
-        offset = np.repeat(event_timestamps, lengths)
-        event_labels = np.repeat(event_labels, lengths)
+        offset = np.repeat(event_timestamps_flat, lengths)
+        event_labels_rep = np.repeat(event_labels_flat, lengths)
+        if epochids is not None:
+            epochids_rep = np.repeat(epochids, lengths)
+        else:
+            epochids_rep = None
         spk_idx = np.concatenate([np.arange(l, r) for l, r in zip(lidx, ridx)])
         spike_times_aligned = spike_timestamps[spk_idx] - offset
         spike_labels_aligned = spike_labels[spk_idx]
-
-        return cls(event_labels, spike_labels_aligned, spike_times_aligned, window)
+        if epochids_rep is not None:
+            return cls(event_labels_rep, spike_labels_aligned, spike_times_aligned, window, trial_metadata=trial_metadata, epochids=epochids_rep, epoch_names=epoch_names)
+        else:
+            return cls(event_labels_rep, spike_labels_aligned, spike_times_aligned, window, trial_metadata=trial_metadata)
 
     @classmethod
     def from_series(
@@ -110,6 +163,7 @@ class SpikeTrainSet:
         spike_timestamps: pd.Series,
         event_timestamps: pd.Series,
         window: Tuple[float, float],
+        trial_metadata: Optional[pd.DataFrame] = None,
     ):
         """Generate SpikeTrainSet from pd.Series of spike and event timestamps
 
@@ -132,6 +186,7 @@ class SpikeTrainSet:
             window,
             spike_timestamps.index,
             event_timestamps.index,
+            trial_metadata=trial_metadata,
         )
 
     def to_dataframe(self):
@@ -154,23 +209,25 @@ class SpikeTrainSet:
         self, time_bins: Optional[Sequence] = None, time_step: Optional[float] = None
     ) -> xr.DataArray:
         """Convert spike train set to PSTH matrix
-
+        
         Parameters
         ----------
-        time_bins : array_like or None
-            if provided, use these time bins to compute the PSTH
+        time_bins : sequence or None
+            Sequence of time bins to use for the histogram. If None, will use time_step.
         time_step : float or None
-            if provided, time bins are generated in the range of self.window with this step size
-
-        Returns
-        -------
-        psth : xarray.DataArray
-            PSTH matrix with dimensions 'trialid', 'unitid', 'time'
+            Time step to use for the histogram. If None, will calculate from time_bins.
 
         Raises
         ------
         ValueError
-            If neither time_bins nor time_step is provided
+            If neither time_bins nor time_step is provided, or if they are not compatible
+
+        Returns
+        -------
+        psth : xr.DataArray
+            DataArray with dimensions ['trialid', 'unitid', 'epoch', 'time'] if epochids is provided,
+            otherwise ['trialid', 'unitid', 'time']. Contains the counts of spikes in each bin.
+
         """
         if time_step is None:
             if time_bins is None:
@@ -182,26 +239,130 @@ class SpikeTrainSet:
             left = left - (time_step / 2)
             right = right + time_step
             time_bin_array = np.arange(left, right, time_step)
-
         trialids_unique, trialids_digitized = np.unique(
             self.trialids, return_inverse=True
         )
         unitids_unique, unitids_digitized = np.unique(self.unitids, return_inverse=True)
-        psth, _ = np.histogramdd(
-            np.array([trialids_digitized, unitids_digitized, self.spike_times]).T,
-            bins=[
-                np.arange(trialids_unique.size + 1),
-                np.arange(unitids_unique.size + 1),
-                time_bin_array,
-            ],
-        )
         time = time_bin_array[:-1] + (time_bin_array[1] - time_bin_array[0]) / 2
-        psth = xr.DataArray(
-            psth,
-            coords={"trialid": trialids_unique, "unitid": unitids_unique, "time": time},
-            dims=["trialid", "unitid", "time"],
-        )
+        coords = {
+            "trialid": trialids_unique,
+            "unitid": unitids_unique,
+            "time": time,
+        }
+        if self.epochids is not None:
+            epochids_unique, epochids_digitized = np.unique(
+                self.epochids, return_inverse=True
+            )
+            # Create a 3D histogram for trialid, unitid, and epochid
+            psth, _ = np.histogramdd(
+                np.array([trialids_digitized, unitids_digitized, epochids_digitized, self.spike_times]).T,
+                bins=[
+                    np.arange(trialids_unique.size + 1),
+                    np.arange(unitids_unique.size + 1),
+                    np.arange(epochids_unique.size + 1),
+                    time_bin_array,
+                ]
+            )
+            coords["epoch"] = self.epoch_names if self.epoch_names is not None else epochids_unique
+            dims = ["trialid", "unitid", "epoch", "time"]
+        else:
+            psth, _ = np.histogramdd(
+                np.array([trialids_digitized, unitids_digitized, self.spike_times]).T,
+                bins=[
+                    np.arange(trialids_unique.size + 1),
+                    np.arange(unitids_unique.size + 1),
+                    time_bin_array,
+                ]
+            )
+            dims = ["trialid", "unitid", "time"]
+        psth = xr.DataArray(psth, coords=coords, dims=dims)
+        # Attach trial metadata as coordinates if present
+        if self.trial_metadata is not None:
+            psth = psth.assign_coords({
+                col: ("trialid", self.trial_metadata.loc[trialids_unique, col].values)
+                for col in self.trial_metadata.columns
+            })
         return psth
+
+    def get_plotting_data(self, 
+            group: Optional[str | Sequence[str]]=None, 
+            sort: Optional[str | Sequence[str]]=None,
+            palette: Optional[str | Mapping]=None,
+            psth_params: Optional[Mapping]=None
+        ):
+        # if a sort parameter is provided, we will sort trials by those values
+        # if grouped, we will sort by group at the end
+        sort_keys = []
+        output = {}
+        unique_groups = np.ones(self.trialids.size, dtype=int)  # Default to single group if no grouping
+        if self.trial_metadata is None:
+            if sort is not None or group is not None:
+                raise ValueError("Cannot sort or group trials without trial metadata")
+            else:
+                _, trialids = np.unique(self.trialids, return_inverse=True)
+        else:
+            if sort is not None:
+                if isinstance(sort, str):
+                    sort = [sort]
+                if any(s not in self.trial_metadata.columns for s in sort):
+                    raise ValueError(f"Sort columns {sort} not found in trial metadata")
+                sort_keys.extend(sort)
+            if group is not None:
+                if isinstance(group, str):
+                    group = [group]
+                if any(g not in self.trial_metadata.columns for g in group):
+                    raise ValueError(f"Group columns {group} not found in trial metadata")
+                sort_keys.extend(group)
+
+            if sort_keys:
+                sorted_table = self.trial_metadata.sort_values(by=sort_keys, ascending=True)
+                sorted_table['sorted_trialid'] = np.arange(len(sorted_table))
+                trialids = sorted_table.loc[self.trialids, 'sorted_trialid'].values
+            else:
+                _, trialids = np.unique(self.trialids, return_inverse=True)
+        
+            if group is not None:
+                groupdata = self.trial_metadata.loc[self.trialids, group].to_records(index=False) #type: ignore
+                unique_groups, output['groupids'] = np.unique(groupdata, return_inverse=True)
+                if palette is None:
+                    palette = 'Set1'
+                if isinstance(palette, str):
+                    from matplotlib import colormaps
+                    cmap = colormaps.get_cmap(palette)
+                    if hasattr(cmap, 'colors'):
+                        colors = cmap.colors #type: ignore
+                    else:
+                        colors = cmap(np.arange(cmap.N))
+
+                    palette = {
+                        tuple(g): colors[i % len(colors)]
+                        for i, g in enumerate(unique_groups)
+                    }
+                colors = [palette.get(tuple(g), None) for g in unique_groups]  # ensure palette is an array
+                output['colors'] = map(tuple, np.take(colors, output['groupids'], axis=0))
+
+        if psth_params is None:
+            psth_params = {}
+        psth = self.to_psth(**psth_params)
+        if group is not None:
+            psth = psth.groupby(group).mean()
+        else:
+            psth = psth.mean(dim='trialid')
+
+        output['trialid'] = trialids
+        output['unitid'] = self.unitids
+        output['spike_times'] = self.spike_times
+        if self.epochids is not None:
+            if self.epoch_names is not None:
+                output['epoch'] = np.take(self.epoch_names, self.epochids)
+            else:
+                output['epoch'] = self.epochids
+
+        if output.get('colors') is None:
+            output['colors'] = [(0,0,0)] * len(output['trialid'])
+            palette = {'default': (0, 0, 0)}
+        output = pd.DataFrame(output)
+        return output, psth, palette
 
     def get_firing_rates(
         self, window: Optional[Tuple[float, float]] = None
@@ -223,54 +384,65 @@ class SpikeTrainSet:
     def save(self, path: str):
         """Save the SpikeTrainSet as a DataArray in a zip file."""
         with zipfile.ZipFile(path, "w") as zf:
-            # save self.spike_times, self.trialids and self.unitids
-            # as npy files within this archive
             with zf.open("spike_times.npy", "w") as f:
                 np.save(f, self.spike_times)
             with zf.open("trialids.npy", "w") as f:
                 np.save(f, self.trialids)
             with zf.open("unitids.npy", "w") as f:
                 np.save(f, self.unitids)
-            # save the window as a text file
             with zf.open("window.txt", "w") as f:
                 value = f"{self.window[0]} {self.window[1]}"
                 f.write(value.encode("utf-8"))
+            # Save trial metadata as CSV if present
+            if self.trial_metadata is not None:
+                with zf.open("trial_metadata.csv", "w") as f:
+                    csv_bytes = self.trial_metadata.to_csv().encode("utf-8")
+                    f.write(csv_bytes)
+            if self.epochids is not None:
+                with zf.open("epochids.npy", "w") as f:
+                    np.save(f, self.epochids)
+            if self.epoch_names is not None:
+                with zf.open("epoch_names.txt", "w") as f:
+                    f.write("\n".join(self.epoch_names).encode("utf-8"))
 
     @classmethod
     def load(cls, path: str) -> "SpikeTrainSet":
         with zipfile.ZipFile(path, "r") as zf:
-            # load self.spike_times, self.trialids and self.unitids
-            # from npy files within this archive
             with zf.open("spike_times.npy") as f:
                 spike_times = np.load(f)
             with zf.open("trialids.npy") as f:
                 trialids = np.load(f)
             with zf.open("unitids.npy") as f:
                 unitids = np.load(f)
-            # load the window from a text file
             with zf.open("window.txt") as f:
                 window = tuple(map(float, f.read().decode("utf-8").split()))
                 if len(window) != 2:
                     raise ValueError("Window must be a tuple of length 2")
-        return cls(trialids, unitids, spike_times, window)
+            # Try to load trial metadata
+            try:
+                with zf.open("trial_metadata.csv") as f:
+                    trial_metadata = pd.read_csv(io.StringIO(f.read().decode("utf-8")), index_col=0)
+            except KeyError:
+                trial_metadata = None
+            
+            # Try to load epochids
+            try:
+                with zf.open("epochids.npy") as f:
+                    epochids = np.load(f)
+            except KeyError:
+                epochids = None
+            # Try to load epoch names
+            try:
+                with zf.open("epoch_names.txt") as f:
+                    epoch_names = f.read().decode("utf-8").splitlines()
+            except KeyError:
+                epoch_names = None
+        return cls(trialids, unitids, spike_times, window, trial_metadata=trial_metadata, epochids=epochids, epoch_names=epoch_names)
 
     def view(self):
-        try:
-            from PyQt5.QtCore import Qt
-            from PyQt5.QtWidgets import QApplication, QMainWindow
-            from simianpy.analysis.spiketrain.spiketrainsetviewer import (
-                SpikeTrainSetViewer,
-            )
-        except ImportError:
+        if not pyqtmgl:
             raise ImportError(
                 "pyqtmgl is not set up. Please install it to use this function."
+                "You can install it with `pip install git+https://github.com/jselvan/pyqtmgl.git`."
             )
-        QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)
-        app = QApplication([])
-        window = QMainWindow()
-        window.setWindowTitle("Spike Train Set Viewer")
-
-        sv = SpikeTrainSetViewer(self)
-        window.setCentralWidget(sv)
-        window.show()
-        app.exec_()
+        launch_viewer(self)
