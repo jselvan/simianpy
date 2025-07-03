@@ -35,6 +35,7 @@ class GazeData:
         time: np.ndarray,
         position: np.ndarray,
         dimensions: Sequence[str],
+        trialid: Optional[np.ndarray] = None,
         blink_mask: Optional[np.ndarray] = None,
     ):
         data = xr.DataArray(
@@ -42,6 +43,8 @@ class GazeData:
             dims=("time", "dimension"),
             coords=dict(time=time, dimension=dimensions),
         )
+        if trialid is not None:
+            data = data.assign_coords(trialid=("time", trialid))
         return cls(data, blink_mask)
 
     def mask_blinks(self, threshold: Number = 30, pad: Optional[int] = None):
@@ -150,6 +153,8 @@ class GazeData:
         computed = {}
         for field in ["onset", "offset"]:
             computed[f"{field}_time"] = self.data.time[data[field]].values
+            if 'trialid' in self.data.coords:
+                computed[f"{field}_trialid"] = self.data.trialid[data[field]].values
             for dim in dimensions:
                 computed[f"{field}_{dim}"] = (
                     self.data.isel(time=data[field]).sel(dimension=dim).values
@@ -278,7 +283,7 @@ class GazeData:
         colours[0, :] = ORANGE
         colours[1, :] = BLUE
         for key, data in self.inferred.items():
-            for onset_t, offset_t in zip(data["onset.time"], data["offset.time"]):
+            for onset_t, offset_t in zip(data["onset_time"], data["offset_time"]):
                 onset = self.data.get_index("time").get_loc(onset_t)
                 offset = self.data.get_index("time").get_loc(offset_t)
                 tslice = slice(onset, offset)
@@ -359,7 +364,7 @@ class GazeData:
         return gd
 
     @classmethod
-    def from_monkeylogic(cls, path: str):
+    def from_monkeylogic(cls, path: str, align_event: Optional[int]=None):
         """Load gaze data from a MonkeyLogic .gaze file
 
         Parameters
@@ -378,16 +383,30 @@ class GazeData:
 
         data = load(Path(path), include_user_vars=False)
 
-        eyedata = np.concatenate(
-            [
-                np.c_[
-                    np.arange(trial["eye"].shape[-1]) + trial["start_time"],
-                    trial["eye"].T,
+        if align_event is None:
+            eyedata = np.concatenate(
+                [
+                    np.c_[
+                        np.repeat(trial["trialid"], trial["eye"].shape[-1]),
+                        np.arange(trial["eye"].shape[-1]) + trial["start_time"],
+                        trial["eye"].T,
+                    ]
+                    for trial in data
                 ]
-                for trial in data
-            ]
-        )
-        time = eyedata[:, 0] / 1000  # convert to seconds
-        eye = eyedata[:, 1:]
-        gaze = GazeData.from_arrays(time, eye, ["eyeh", "eyev"])
+            )
+        else:
+            eyedata = np.concatenate(
+                [
+                    np.c_[
+                        np.repeat(trial["trialid"], trial["eye"].shape[-1]),
+                        np.arange(trial["eye"].shape[-1]) - trial["timestamps"][trial["markers"]==align_event][0],
+                        trial["eye"].T,
+                    ]
+                    for trial in data
+                ]
+            )
+        trialid = eyedata[:, 0].astype('int16')
+        time = eyedata[:, 1] / 1000  # convert to seconds
+        eye = eyedata[:, 2:]
+        gaze = GazeData.from_arrays(time, eye, ["eyeh", "eyev"], trialid=trialid)
         return gaze
