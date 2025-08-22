@@ -69,6 +69,9 @@ class SpikeTrainSet:
             self.epochids = None
             self.n_epochs = None
         self.epoch_names = epoch_names
+        if self.epoch_names is not None:
+            if len(self.epoch_names) != self.n_epochs:
+                raise ValueError("Length of epoch_names must match number of epochs exactly")
 
     @classmethod
     def from_arrays(
@@ -115,13 +118,15 @@ class SpikeTrainSet:
         else:
             event_labels = np.array(event_labels)
         if is_2d:
+            mask = np.isnan(event_timestamps).all(axis=0)
+            event_timestamps = event_timestamps[:, ~mask]
             n_events, n_epochs = event_timestamps.shape
             # Flatten event_timestamps, repeat event_labels and epochids
             event_timestamps_flat = event_timestamps.flatten()
             event_labels_flat = np.repeat(event_labels, n_epochs)
             epochids = np.tile(np.arange(n_epochs), n_events)
             if epoch_names is not None:
-                epoch_names = list(epoch_names)
+                epoch_names = [name for name, valid in zip(epoch_names, ~mask) if valid]
                 if len(epoch_names) != n_epochs:
                     raise ValueError("Length of epoch_names must match number of epochs")
             else:
@@ -137,8 +142,6 @@ class SpikeTrainSet:
         spike_labels = spike_labels[spk_sort_idx]
         event_timestamps_flat = event_timestamps_flat[evt_sort_idx]
         event_labels_flat = event_labels_flat[evt_sort_idx]
-        if epochids is not None:
-            epochids = np.array(epochids)[evt_sort_idx]
         left, right = event_timestamps_flat + window[0], event_timestamps_flat + window[1]
         lidx = np.searchsorted(spike_timestamps, left, side="left")
         ridx = np.searchsorted(spike_timestamps, right, side="right")
@@ -146,16 +149,14 @@ class SpikeTrainSet:
         offset = np.repeat(event_timestamps_flat, lengths)
         event_labels_rep = np.repeat(event_labels_flat, lengths)
         if epochids is not None:
+            epochids = np.array(epochids)[evt_sort_idx]
             epochids_rep = np.repeat(epochids, lengths)
         else:
             epochids_rep = None
         spk_idx = np.concatenate([np.arange(l, r) for l, r in zip(lidx, ridx)])
         spike_times_aligned = spike_timestamps[spk_idx] - offset
         spike_labels_aligned = spike_labels[spk_idx]
-        if epochids_rep is not None:
-            return cls(event_labels_rep, spike_labels_aligned, spike_times_aligned, window, trial_metadata=trial_metadata, epochids=epochids_rep, epoch_names=epoch_names)
-        else:
-            return cls(event_labels_rep, spike_labels_aligned, spike_times_aligned, window, trial_metadata=trial_metadata)
+        return cls(event_labels_rep, spike_labels_aligned, spike_times_aligned, window, trial_metadata=trial_metadata, epochids=epochids_rep, epoch_names=epoch_names)
 
     @classmethod
     def from_series(
