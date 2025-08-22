@@ -3,8 +3,13 @@
 **Author**: Janahan Selvanayagam  
 **E-mail**: <seljanahan@hotmail.com>  
 
+Data analysis tools designed for working with primate neuroscientific data
+
 ```python
 >>> import simianpy as simi
+>>> from simianpy.analysis.spiketrain import SpikeTrainSet
+>>> from simianpy.analysis.gaze import GazeData
+>>> from simianpy.signal.sosfilter import sosFilter
 ```
 
 # Installation  
