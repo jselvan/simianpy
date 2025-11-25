@@ -34,13 +34,21 @@ def read_variable(file: BinaryIO, pbar: Optional[tqdm] = None):
 
     n_values = reduce(lambda x, y: x * y, var_size)
 
-    if var_type in ['double', 'uint64', 'logical']:
-        if var_type == 'double':
-            data_type = 'd' * n_values
-        elif var_type == 'uint64':
-            data_type = 'Q' * n_values
-        elif var_type == 'logical':
-            data_type = 'B' * n_values
+    dtype_map = {
+        'double': 'd',
+        'uint64': 'Q',
+        'int64': 'q',
+        'single': 'f',
+        'uint32': 'I',
+        'int32': 'i',
+        'uint16': 'H',
+        'int16': 'h',
+        'logical': 'B',
+        'char': 'c',
+    }
+
+    if var_type in dtype_map:
+        data_type = dtype_map[var_type] * n_values
         data_size = struct.calcsize(data_type)
         data = struct.unpack(data_type, file.read(data_size))
         if n_values == 1:
