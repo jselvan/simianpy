@@ -27,6 +27,7 @@ FULL = [
     "colorama",
     "ipython",
     "pyqtmgl",
+    "dask[array]",
 ]
 
 [project.scripts]
