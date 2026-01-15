@@ -28,6 +28,7 @@ FULL = [
     "ipython",
     "pyqtmgl",
     "dask[array]",
+    "ssqueezepy>=0.6.6",
 ]
 
 [project.scripts]
@@ -42,6 +43,11 @@ constraint-dependencies = ["pyqt5-qt5 <=5.15.2"]
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
