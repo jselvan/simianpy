@@ -207,14 +207,14 @@ class SpikeTrainSet:
         )
 
     def to_psth(
-        self, time_bins: Optional[Sequence] = None, time_step: Optional[float] = None
+        self, time_bins: Optional[ArrayLike] = None, time_step: Optional[float] = None
     ) -> xr.DataArray:
         """Convert spike train set to PSTH matrix
         
         Parameters
         ----------
-        time_bins : sequence or None
-            Sequence of time bins to use for the histogram. If None, will use time_step.
+        time_bins : ArrayLike or None
+            ArrayLike of time bins to use for the histogram. If None, will use time_step.
         time_step : float or None
             Time step to use for the histogram. If None, will calculate from time_bins.
 
@@ -343,12 +343,14 @@ class SpikeTrainSet:
                 output['colors'] = map(tuple, np.take(colors, output['groupids'], axis=0))
 
         if psth_params is None:
-            psth_params = {}
-        psth = self.to_psth(**psth_params)
-        if group is not None:
-            psth = psth.groupby(group).mean()
+            # psth_params = {}
+            psth = None
         else:
-            psth = psth.mean(dim='trialid')
+            psth = self.to_psth(**psth_params)
+            if group is not None:
+                psth = psth.groupby(group).mean()
+            else:
+                psth = psth.mean(dim='trialid')
 
         output['trialid'] = trialids
         output['unitid'] = self.unitids

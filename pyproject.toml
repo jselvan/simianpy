@@ -20,16 +20,15 @@ dependencies = [
     "tables",
     "tqdm",
     "click",
+    "formulaic>=1.2.1",
 ]
 
 [project.optional-dependencies]
 FULL = [
-    "colorama",
-    "ipython",
-    "pyqtmgl",
     "dask[array]",
     "ssqueezepy>=0.6.6",
 ]
+
 
 [project.scripts]
 simi = "simianpy.scripts:simi"
