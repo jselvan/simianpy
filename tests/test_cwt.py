@@ -1,36 +1,34 @@
-from simianpy.analysis.lfp.phase import xr_compute_phase
-import numpy as np
-import xarray as xr
+from simianpy.analysis.lfp.decomposition import xr_cwt
 
-def test_xr_compute_phase_basic():
-    """
-    Test xr_compute_phase on a simple sinusoidal signal.
-    """
+def test_xr_cwt():
+    import xarray as xr
+    import numpy as np
 
-    sampling_rate = 1000.0  # Hz
-    duration = 1.0  # seconds
-    t = np.linspace(0, duration, int(sampling_rate * duration), endpoint=False)
+    n_channels = 2
+    n_timepoints = 1000
+    sampling_rate = 1000.0
 
-    freq = 5.0  # Hz
-    signal = np.sin(2 * np.pi * freq * t)
-
+    times = np.arange(n_timepoints) / sampling_rate
     data = xr.DataArray(
-        signal,
-        dims=("time",),
-        coords={"time": t},
+        np.random.randn(n_channels, n_timepoints).astype(np.float32),
+        dims=("channel", "time"),
+        coords={"channel": np.arange(n_channels), "time": times},
     )
 
-    phase_da = xr_compute_phase(
+    freq_range = (5.0, 100.0)
+    n_freqs = 10
+
+    cwt_result = xr_cwt(
         data,
+        freq_range=freq_range,
+        n_freqs=n_freqs,
         time_dim="time",
         sampling_rate=sampling_rate,
     )
 
-    # ---- assertions ----
-
-    # Correct dims
-    assert phase_da.dims == ("freq", "time")
-
-    # Check that the frequency axis contains the expected frequency
-    freqs = phase_da.freq.values
-    assert np.any(np.isclose(freqs, freq, atol=0.5)), "Expected frequency not found in freq axis"
+    assert "power" in cwt_result.data_vars
+    assert "phase" in cwt_result.data_vars
+    assert cwt_result.power.shape == (n_channels, n_freqs, n_timepoints)
+    assert cwt_result.phase.shape == (n_channels, n_freqs, n_timepoints)
+    assert cwt_result.power.dtype == np.float32
+    assert cwt_result.phase.dtype == np.float32
