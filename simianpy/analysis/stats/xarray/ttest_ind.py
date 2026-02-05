@@ -1,9 +1,9 @@
 from scipy.stats import ttest_ind
 import xarray as xr
 
-def xr_ttest_ind(a, b, dim):
-    remaining_dims = set(a.dims) - set((dim,))
-    t, p = ttest_ind(a, b, axis=a.get_axis_num(dim))
+def xr_ttest_ind(a, b, dim, **kwargs):
+    remaining_dims = [d for d in a.dims if d != dim]
+    t, p = ttest_ind(a, b, axis=a.get_axis_num(dim), **kwargs)
     stat = xr.Dataset(
         {
             't': (remaining_dims, t),
@@ -13,7 +13,7 @@ def xr_ttest_ind(a, b, dim):
     )
     return stat
 
-def xr_ttest_ind_by_var(data, var, a, b, dim):
+def xr_ttest_ind_by_var(data, var, a, b, dim, **kwargs):
     a = data.query({dim: f"{var}=='{a}'"})
     b = data.query({dim: f"{var}=='{b}'"})
-    return xr_ttest_ind(a, b, dim=dim)
+    return xr_ttest_ind(a, b, dim=dim, **kwargs)
