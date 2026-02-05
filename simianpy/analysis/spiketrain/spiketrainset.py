@@ -1,4 +1,4 @@
-from typing import Optional, Sequence, Tuple, Mapping
+from typing import Optional, Sequence, Tuple, Mapping, Callable
 import zipfile
 import io
 
@@ -12,6 +12,7 @@ try:
     from simianpy.analysis.spiketrain.spiketrainsetviewer import launch_viewer
 except ImportError:
     pyqtmgl = False
+    launch_viewer = None
 else:
     pyqtmgl = True
 
@@ -45,16 +46,18 @@ class SpikeTrainSet:
         ValueError
             If trialids, unitids, and spike_times are not the same length
         """
+        if not (len(trialids) == len(unitids) == len(spike_times)):
+            raise ValueError("All inputs must be the same length")
+        if window is None:
+            window = (self.spike_times.min(), self.spike_times.max())
+        if window[0] > window[1]:
+            raise ValueError("Window start must be less than or equal to window end")
         self.trialids = trialids
         self.n_trials = np.unique(trialids).size
         self.unitids = unitids
         self.n_units = np.unique(unitids).size
         self.spike_times = spike_times
-        if window is None:
-            window = (self.spike_times.min(), self.spike_times.max())
         self.window = window
-        if not (len(trialids) == len(unitids) == len(spike_times)):
-            raise ValueError("All inputs must be the same length")
         if trial_metadata is not None:
             trialids_unique = np.unique(trialids)
             trial_metadata = trial_metadata.loc[trialids_unique]
@@ -72,6 +75,13 @@ class SpikeTrainSet:
         if self.epoch_names is not None:
             if len(self.epoch_names) != self.n_epochs:
                 raise ValueError("Length of epoch_names must match number of epochs exactly")
+
+    def __repr__(self):
+        return (
+            f"SpikeTrainSet(n_trials={self.n_trials}, n_units={self.n_units}, "
+            f"n_spikes={len(self.spike_times)}, window={self.window})"
+            f"{', n_epochs=' + str(self.n_epochs) if self.epochids is not None else ''}"
+        )
 
     @classmethod
     def from_arrays(
@@ -207,7 +217,10 @@ class SpikeTrainSet:
         )
 
     def to_psth(
-        self, time_bins: Optional[ArrayLike] = None, time_step: Optional[float] = None
+        self, 
+        time_bins: Optional[ArrayLike] = None, 
+        time_step: Optional[float] = None,
+        epochs: Optional[Sequence[str]] = None
     ) -> xr.DataArray:
         """Convert spike train set to PSTH matrix
         
@@ -217,6 +230,8 @@ class SpikeTrainSet:
             ArrayLike of time bins to use for the histogram. If None, will use time_step.
         time_step : float or None
             Time step to use for the histogram. If None, will calculate from time_bins.
+        epochs : Sequence[str] or None
+            Sequence of epoch names corresponding to epoch IDs.
 
         Raises
         ------
@@ -233,8 +248,8 @@ class SpikeTrainSet:
         if time_step is None:
             if time_bins is None:
                 raise ValueError("Either time_bins or time_step must be provided")
-            time_step = time_bins[1] - time_bins[0]
             time_bin_array = np.asarray(time_bins)
+            time_step = time_bin_array[1] - time_bin_array[0]
         else:
             left, right = self.window
             left = left - (time_step / 2)
@@ -251,12 +266,27 @@ class SpikeTrainSet:
             "time": time,
         }
         if self.epochids is not None:
+            # mask epochs if epoch names are provided
+            if epochs is not None:
+                if self.epoch_names is None:
+                    raise ValueError("Epoch names must be provided in SpikeTrainSet if epochs parameter is used")
+                selected_epoch_ids = [self.epoch_names.index(epoch) for epoch in epochs if epoch in self.epoch_names]
+                mask = np.isin(self.epochids, selected_epoch_ids)
+                trialids_digitized = trialids_digitized[mask]
+                unitids_digitized = unitids_digitized[mask]
+                spike_times = self.spike_times[mask]
+                epochids = self.epochids[mask]
+            else:
+                spike_times = self.spike_times
+                epochids = self.epochids
+
+
             epochids_unique, epochids_digitized = np.unique(
-                self.epochids, return_inverse=True
+                epochids, return_inverse=True
             )
             # Create a 3D histogram for trialid, unitid, and epochid
             psth, _ = np.histogramdd(
-                np.array([trialids_digitized, unitids_digitized, epochids_digitized, self.spike_times]).T,
+                np.array([trialids_digitized, unitids_digitized, epochids_digitized, spike_times]).T,
                 bins=[
                     np.arange(trialids_unique.size + 1),
                     np.arange(unitids_unique.size + 1),
@@ -264,7 +294,7 @@ class SpikeTrainSet:
                     time_bin_array,
                 ]
             )
-            coords["epoch"] = self.epoch_names if self.epoch_names is not None else epochids_unique
+            coords["epoch"] = epochs if epochs is not None else (self.epoch_names if self.epoch_names is not None else epochids_unique)
             dims = ["trialid", "unitid", "epoch", "time"]
         else:
             psth, _ = np.histogramdd(
@@ -284,6 +314,44 @@ class SpikeTrainSet:
                 for col in self.trial_metadata.columns
             })
         return psth
+
+    def to_sdf(self, window: str | Tuple[str, int] | Callable[[np.ndarray], np.ndarray]="psp", epochs: Optional[Sequence[str]] = None) -> xr.DataArray:
+        psth = self.to_psth(time_step=0.001, epochs=epochs)
+        if window == "psp":
+            window_size = 0.02  # 20 ms default
+            def psp_kernel(t, tau=0.005, t_peak=0.001):
+                k = (t >= 0) * (np.exp(-t / tau) - np.exp(-t / t_peak))
+                k /= np.sum(k)
+                return k
+            t_kernel = np.arange(0, window_size, 0.001)
+            kernel = psp_kernel(t_kernel)
+            def convolve(signal):
+                return np.convolve(signal, kernel, mode='same').astype(np.float32)
+        elif isinstance(window, tuple) and window[0] == "gaussian":
+            window_size = window[1]
+            def gaussian_kernel(t, sigma=0.005):
+                k = np.exp(-0.5 * (t / sigma) ** 2)
+                k /= np.sum(k)
+                return k
+            t_kernel = np.arange(-window_size / 2, window_size / 2, 0.001)
+            kernel = gaussian_kernel(t_kernel)
+            def convolve(signal):
+                return np.convolve(signal, kernel, mode='same').astype(np.float32)
+        elif callable(window):
+            convolve = window  # type: ignore
+        else:
+            raise ValueError("Invalid window parameter")
+
+        sdf = xr.apply_ufunc(
+            convolve,
+            psth,
+            input_core_dims=[["time"]],
+            output_core_dims=[["time"]],
+            vectorize=True,
+            dask="parallelized",
+            output_dtypes=[np.float32],
+        )
+        return sdf
 
     def get_plotting_data(self, 
             group: Optional[str | Sequence[str]]=None, 
@@ -339,8 +407,8 @@ class SpikeTrainSet:
                         tuple(g): colors[i % len(colors)]
                         for i, g in enumerate(unique_groups)
                     }
-                colors = [palette.get(tuple(g), None) for g in unique_groups]  # ensure palette is an array
-                output['colors'] = map(tuple, np.take(colors, output['groupids'], axis=0))
+                colors = np.array([palette.get(tuple(g), None) for g in unique_groups])
+                output['colors'] = list(map(tuple, np.take(colors, output['groupids'], axis=0)))
 
         if psth_params is None:
             # psth_params = {}
@@ -380,9 +448,6 @@ class SpikeTrainSet:
         duration = window[1] - window[0]
         fr = self.to_psth(time_bins=window) / duration
         return fr
-
-    def to_sdf(self, convolve, window="psp", window_size=None):
-        pass
 
     def save(self, path: str):
         """Save the SpikeTrainSet as a DataArray in a zip file."""
@@ -443,7 +508,7 @@ class SpikeTrainSet:
         return cls(trialids, unitids, spike_times, window, trial_metadata=trial_metadata, epochids=epochids, epoch_names=epoch_names)
 
     def view(self):
-        if not pyqtmgl:
+        if not pyqtmgl or launch_viewer is None:
             raise ImportError(
                 "pyqtmgl is not set up. Please install it to use this function."
                 "You can install it with `pip install git+https://github.com/jselvan/pyqtmgl.git`."
