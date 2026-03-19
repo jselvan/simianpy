@@ -391,8 +391,12 @@ class SpikeTrainSet:
                 _, trialids = np.unique(self.trialids, return_inverse=True)
         
             if group is not None:
-                groupdata = self.trial_metadata.loc[self.trialids, group].to_records(index=False) #type: ignore
+                groupdata = self.trial_metadata.loc[self.trialids, group]
+                mask = groupdata.isna().any(axis=1)
+                groupdata = groupdata.to_records(index=False) #type: ignore
                 unique_groups, output['groupids'] = np.unique(groupdata, return_inverse=True)
+                output['groupids'] = np.where(mask, -1, output['groupids'])
+
                 if palette is None:
                     palette = 'Set1'
                 if isinstance(palette, str):
@@ -406,8 +410,9 @@ class SpikeTrainSet:
                     palette = {
                         tuple(g): colors[i % len(colors)]
                         for i, g in enumerate(unique_groups)
+                        if i in output['groupids']
                     }
-                colors = np.array([palette.get(tuple(g), None) for g in unique_groups])
+                colors = np.array([palette.get(tuple(g), (0,0,0)) for g in unique_groups])
                 output['colors'] = list(map(tuple, np.take(colors, output['groupids'], axis=0)))
 
         if psth_params is None:
