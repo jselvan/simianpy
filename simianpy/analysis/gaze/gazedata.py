@@ -8,6 +8,8 @@ import xarray as xr
 from numpy.typing import ArrayLike
 
 from simianpy.misc import binary_digitize
+from simianpy.analysis.gaze.trialgazedata import TrialGazeData
+
 
 query_fmt = Mapping[Literal["min", "max"], Number]
 
@@ -71,7 +73,7 @@ class GazeData:
             idx = np.concatenate(
                 [np.arange(start, end) for start, end in zip(blink_start, blink_end)]
             )
-        self.blink_mask[idx] = False
+            self.blink_mask[idx] = False
 
     def differentiate(
         self,
@@ -135,7 +137,9 @@ class GazeData:
         velocity = self.differentiate(**velocity_params)
         velocity = np.abs(velocity)
         mask = parse_query(velocity, velocity_query)
-        onsets, offsets = binary_digitize(mask)
+        padded = np.concatenate(([False], mask, [False]))
+        onsets = np.where(~padded[:-1] & padded[1:])[0]
+        offsets = np.where(padded[:-1] & ~padded[1:])[0]
         return {"onset": onsets, "offset": offsets, "velocity": velocity}
 
     def get_saccades(
@@ -148,6 +152,15 @@ class GazeData:
     ):
         data = self.identify_velocity_events(velocity_query, velocity_params)
         dimensions = [dim.item() for dim in self.data.dimension]
+        if data["onset"].size == 0:
+            columns = ["onset_time", "offset_time", "duration", "amplitude", "peak_velocity"]
+            if "trialid" in self.data.coords:
+                columns.extend(["onset_trialid", "offset_trialid"])
+            for dim in dimensions:
+                columns.extend([f"onset_{dim}", f"offset_{dim}"])
+            computed = pd.DataFrame(columns=list(dict.fromkeys(columns)))
+            self.inferred["saccades"] = computed
+            return computed
 
         # compute some derived quantities
         computed = {}
@@ -217,6 +230,11 @@ class GazeData:
     ):
         data = self.identify_velocity_events(velocity_query, velocity_params)
         dimensions = [dim.item() for dim in self.data.dimension]
+        if data["onset"].size == 0:
+            columns = ["onset_time", "offset_time", "duration", *dimensions]
+            computed = pd.DataFrame(columns=columns)
+            self.inferred["fixations"] = computed
+            return computed
 
         # compute some derived quantities
         computed = {}
@@ -296,6 +314,89 @@ class GazeData:
 
         run_dockable([ContinuousViewer], points=points, colours=colours)
 
+    def to_trials(
+        self,
+        event_timestamps: ArrayLike | pd.Series,
+        window: tuple[float, float],
+        event_labels: Optional[ArrayLike] = None,
+        trial_metadata: Optional[pd.DataFrame] = None,
+        time_step: Optional[float] = None,
+    ):
+        if isinstance(event_timestamps, pd.Series):
+            if event_labels is None:
+                event_labels = event_timestamps.index.to_numpy()
+            event_timestamps = event_timestamps.to_numpy()
+        else:
+            event_timestamps = np.asarray(event_timestamps)
+
+        if event_labels is None:
+            event_labels = np.arange(event_timestamps.size, dtype=np.int32)
+        else:
+            event_labels = np.asarray(event_labels)
+
+        if event_timestamps.ndim != 1:
+            raise ValueError("event_timestamps must be one-dimensional")
+        if event_timestamps.size != event_labels.size:
+            raise ValueError("event_timestamps and event_labels must have the same length")
+        if window[0] > window[1]:
+            raise ValueError("Window start must be less than or equal to window end")
+
+        source_time = np.asarray(self.data.time.values, dtype=float)
+        sort_idx = np.argsort(source_time)
+        source_time = source_time[sort_idx]
+        source_values = np.asarray(self.data.values, dtype=float)[sort_idx]
+        source_blink = np.asarray(self.blink_mask, dtype=bool)[sort_idx]
+
+        if time_step is None:
+            diffs = np.diff(source_time)
+            positive_diffs = diffs[diffs > 0]
+            if positive_diffs.size == 0:
+                raise ValueError("Cannot infer time_step from gaze data with fewer than two unique timestamps")
+            time_step = float(np.median(positive_diffs))
+        relative_time = np.arange(window[0], window[1] + (time_step / 2), time_step)
+        dimensions = self.data.dimension.values
+
+        position = np.full((event_labels.size, relative_time.size, len(dimensions)), np.nan, dtype=float)
+        blink_mask = np.zeros((event_labels.size, relative_time.size), dtype=bool)
+
+        for idx, event_time in enumerate(event_timestamps):
+            absolute_time = event_time + relative_time
+            for dim_idx in range(len(dimensions)):
+                position[idx, :, dim_idx] = np.interp(
+                    absolute_time,
+                    source_time,
+                    source_values[:, dim_idx],
+                    left=np.nan,
+                    right=np.nan,
+                )
+            blink_mask[idx, :] = self._sample_mask_nearest(source_time, source_blink, absolute_time)
+
+        data = xr.DataArray(
+            position,
+            dims=("trialid", "time", "dimension"),
+            coords={
+                "trialid": event_labels,
+                "time": relative_time,
+                "dimension": dimensions,
+            },
+        )
+        return TrialGazeData(
+            data=data,
+            blink_mask=blink_mask,
+            window=window,
+            trial_metadata=trial_metadata,
+        )
+
+    @staticmethod
+    def _sample_mask_nearest(source_time, source_blink, query_time):
+        idx = np.searchsorted(source_time, query_time, side="left")
+        idx = np.clip(idx, 0, source_time.size - 1)
+        prev_idx = np.clip(idx - 1, 0, source_time.size - 1)
+        use_prev = np.abs(query_time - source_time[prev_idx]) <= np.abs(query_time - source_time[idx])
+        nearest_idx = np.where(use_prev, prev_idx, idx)
+        in_bounds = (query_time >= source_time[0]) & (query_time <= source_time[-1])
+        return source_blink[nearest_idx] & in_bounds
+
     def save(self, path: str):
         """Save the gaze data to a zip file
 
@@ -359,7 +460,7 @@ class GazeData:
                     with zf.open(name) as f:
                         inferred[event] = pd.read_csv(f)
 
-        gd = cls.from_arrays(time, position, dimensions, blink_mask)
+        gd = cls.from_arrays(time, position, dimensions, blink_mask=blink_mask)
         gd.inferred = inferred
         return gd
 
@@ -410,3 +511,4 @@ class GazeData:
         eye = eyedata[:, 2:]
         gaze = GazeData.from_arrays(time, eye, ["eyeh", "eyev"], trialid=trialid)
         return gaze
+
